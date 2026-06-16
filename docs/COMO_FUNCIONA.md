@@ -224,18 +224,188 @@ A leitura ainda passa por um filtro de suavização próprio (`s_db += 0.3f * (d
 
 ---
 
-## ☀️ 7. Carta solar / Insolação (astronomia solar offline)
+## 🔁 7. CONVERSOR — modo 5
+
+**Ideia física.** A mesma inclinação pode ser expressa de várias formas — graus, porcentagem, proporção e mm por metro. Esta ferramenta mostra todas ao mesmo tempo, partindo do ângulo medido pela bolha (o mesmo cálculo do nível 2D/transferidor).
+
+**Fórmulas.** Partindo do ângulo `big = √(roll² + pitch²)` (em graus):
+
+```
+porcentagem (%)   = tan(big) · 100
+mm por metro      = tan(big) · 1000
+proporção (1:X)   = 1 / tan(big)      (só se big > 0.2°; senão "plano")
+```
+
+(o `big` é convertido para radianos antes da tangente: `tan(big/DEG)`).
+
+**Origem.** São identidades da mesma inclinação. A porcentagem é a tangente vezes 100; `mm/m` é a subida em milímetros para 1000 mm de horizontal (tangente vezes 1000); a proporção 1:X é o inverso da tangente — para cada 1 de subida, X de horizontal.
+
+**Como o código faz** — `src/LevelApp.cpp`, `case 5` e bloco `g_mode == 5`:
+
+```c
+snprintf(s1, ..., "%.1f%%    %.0f mm/m",
+         tanf(big / DEG) * 100.0f, tanf(big / DEG) * 1000.0f);
+if (big > 0.2f) snprintf(s2, ..., "proporcao  1:%.0f", 1.0f / tanf(big / DEG));
+else            snprintf(s2, ..., "plano");
+```
+
+---
+
+## 📐 8. ESQUADRO — modo 6
+
+**Ideia física.** Conferir se uma quina/canto forma 90° (esquadro). A placa mede o ângulo total `big = √(roll² + pitch²)` e a ferramenta compara com 90°.
+
+**Fórmula.**
+
+```
+desvio = big − 90°
+esquadro OK  ⟺  |desvio| < 1°
+```
+
+Fica **verde** (com o texto "ESQUADRO OK (90)" / "quina reta") quando dentro de ±1° de 90; fora disso mostra o desvio assinado (ex.: `+2.3 de 90 graus`).
+
+**Como o código faz** — `src/LevelApp.cpp`, bloco `g_mode == 6`:
+
+```c
+float d = big - 90.0f;
+bool ok = fabsf(d) < 1.0f;
+... snprintf(s, ..., "%+.1f de 90 graus", d);
+```
+
+---
+
+## 📊 9. PLANEZA — modo 7
+
+**Ideia física.** Passar a placa pela superfície (piso, parede, bancada) e ver o quanto ela "balança" — a diferença entre o ponto mais inclinado e o mais nivelado revela ondulações/desnível. Não interessa o valor instantâneo, e sim a **faixa** percorrida.
+
+**Fórmula.** A cada amostra calcula o ângulo total `big = √(roll² + pitch²)` e mantém o mínimo e o máximo vistos desde o último ZERAR:
+
+```
+planMin ← min(planMin, big)
+planMax ← max(planMax, big)
+desvio  = planMax − planMin        [graus]
+```
+
+ZERAR (ou entrar no modo) reinicia a faixa: `planMin = 999`, `planMax = 0`.
+
+**Como o código faz** — `src/LevelApp.cpp`, `case 7` e bloco `g_mode == 7`:
+
+```c
+case 7: bx = r; by = p; big = sqrtf(r * r + p * p);
+        if (big < planMin) planMin = big;
+        if (big > planMax) planMax = big; break;
+...
+snprintf(s, ..., "desvio: %.1f graus", planMax - planMin);
+snprintf(s, ..., "min %.1f   max %.1f", planMin, planMax);
+```
+
+---
+
+## 📈 10. PERFIL — modo 8
+
+**Ideia física.** Levantar o caimento de uma superfície ao longo de um trajeto (ex.: perfil de uma calçada ou laje), em **porcentagem**, registrando o menor, o maior e a média. Como na DECLIVIDADE, o valor é a tangente do pitch.
+
+**Fórmulas.**
+
+```
+caimento (%) = tan(pitch) · 100
+perfMin ← min(perfMin, caimento)
+perfMax ← max(perfMax, caimento)
+média   ≈ (perfMin + perfMax) / 2     [%]
+```
+
+(o `pitch` é convertido para radianos antes da tangente). A média é a aproximação ponto‑médio da faixa registrada — útil como caimento representativo do trecho. ZERAR reinicia: `perfMin = 999`, `perfMax = −999`.
+
+**Como o código faz** — `src/LevelApp.cpp`, `case 8` e bloco `g_mode == 8`:
+
+```c
+case 8: bx = 0; by = p; big = tanf(p / DEG) * 100.0f; unit = "%";
+        if (big < perfMin) perfMin = big;
+        if (big > perfMax) perfMax = big; break;
+...
+float md = (perfMax > -998) ? (perfMin + perfMax) / 2.0f : big;
+snprintf(s, ..., "media ~%.1f%%", md);
+snprintf(s, ..., "min %.1f%%   max %.1f%%", perfMin, perfMax);
+```
+
+---
+
+## 🎯 11. CALIBRAÇÃO do nível (offset persistente)
+
+**Ideia física.** Nenhuma placa fica perfeitamente alinhada com o corpo do aparelho — sempre há um pequeno desvio de montagem do IMU. A calibração (botão **CAL** em Ajustes) mede esse desvio uma vez, apoiando o aparelho numa superfície sabidamente plana, e desconta esse offset de todas as leituras seguintes.
+
+**Fórmulas.** Ao calibrar, guarda‑se o ângulo filtrado atual como offset de fábrica:
+
+```
+gCalR = fRoll        (offset de roll)
+gCalP = fPitch       (offset de pitch)
+```
+
+Depois, toda leitura aplica **dois** descontos — o offset de calibração `gCal*` e o zero relativo `*0` (do botão ZERAR):
+
+```
+r = (fRoll  − gCalR) − roll0
+p = (fPitch − gCalP) − pitch0
+```
+
+**Diferença entre CAL e ZERAR.** O `gCal*` é o "zero de fábrica" (desvio fixo do sensor); o `roll0/pitch0` é um zero temporário contra a peça que se está medindo. Quando se aperta ZERAR, o código já considera a calibração: `roll0 = fRoll − gCalR`.
+
+**Como o código faz** — `src/LevelApp.cpp`, `LevelApp_Calibrate()` e `LevelApp_Update()`:
+
+```c
+void LevelApp_Calibrate() { gCalR = fRoll; gCalP = fPitch; roll0 = 0; pitch0 = 0; }
+...
+float r = (fRoll - gCalR) - roll0;
+float p = (fPitch - gCalP) - pitch0;
+```
+
+---
+
+## 🔋 12. Indicador de bateria (%)
+
+**Ideia física.** A bateria de lítio tem tensão que cai conforme descarrega. Medindo essa tensão dá para estimar a carga restante de forma aproximada, mapeando a faixa útil (~3,3 V vazia → ~4,2 V cheia) para 0–100 %.
+
+**Fórmulas.**
+
+1. **Tensão da bateria** — o ADC lê a tensão num divisor; o driver multiplica de volta pelo fator do divisor (×3) e divide pela correção de offset:
+
+```
+V = (mV_lidos · 3 / 1000) / Measurement_offset      [volts]
+```
+
+2. **Porcentagem** — mapeamento linear da faixa útil, limitado a 0–100 %:
+
+```
+% = (V − 3.30) / 0.90 · 100        (clamp 0…100)
+```
+
+O `0.90` é a largura da janela usada (3,30 V → 4,20 V). É uma estimativa **linear simples** — a curva real de descarga do lítio não é reta, então serve como indicação grosseira, não como medidor preciso.
+
+**Origem / código.**
+- Tensão: `BAT_Get_Volts()` em `src/BAT_Driver.cpp` (ADC de 12 bits em **GPIO8**, `analogReadMilliVolts`).
+- Porcentagem: barra de status em `src/LevelApp.cpp`:
+
+```c
+int pct = (int)((BAT_analogVolts - 3.30f) / 0.90f * 100.0f);
+if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+```
+
+A barra de status no topo de cada ferramenta mostra `HH:MM` (hora do RTC) + a bateria em %.
+
+---
+
+## ☀️ 13. Carta solar / Insolação (astronomia solar offline)
 
 Esta é a parte mais matemática. O **mesmo cálculo existe em dois lugares**: em **C** (`src/Sun.cpp`, para desenhar na tela do ESP) e em **JavaScript** (página `/sol` dentro de `src/WebPortal.cpp`, para rodar no celular). As fórmulas são idênticas; abaixo elas aparecem uma vez, com referência aos dois arquivos.
 
-### 7.1 Dia do ano (N)
+### 13.1 Dia do ano (N)
 
 Número do dia no ano (1 a 365/366), com correção de ano bissexto. É a entrada de quase tudo.
 
 - **C** — `dayOfYear()` em `src/Sun.cpp` (tabela cumulativa de meses + ajuste de bissexto).
 - **JS** — `doy()` em `src/WebPortal.cpp` (diferença de datas UTC).
 
-### 7.2 Declinação solar (δ)
+### 13.2 Declinação solar (δ)
 
 **Ideia física.** A inclinação do eixo da Terra (~23,45°) faz o sol "subir e descer" no céu ao longo do ano. A declinação é o ângulo do sol em relação ao equador celeste.
 
@@ -253,7 +423,7 @@ Número do dia no ano (1 a 365/366), com correção de ano bissexto. É a entrad
 return 23.45f * sinf(RAD*360.0f*(284+N)/365.0f);
 ```
 
-### 7.3 Equação do tempo (EoT)
+### 13.3 Equação do tempo (EoT)
 
 **Ideia física.** O sol "verdadeiro" adianta ou atrasa em relação ao relógio (até ~±15 min) por causa da órbita elíptica e da inclinação do eixo. A EoT corrige isso.
 
@@ -268,7 +438,7 @@ EoT = 9.87·sin(2B) − 7.53·cos(B) − 1.5·sin(B)   [minutos]
 
 **Código.** `eotN()` em `src/Sun.cpp` e `eot()` em `src/WebPortal.cpp`.
 
-### 7.4 Correção de tempo e hora solar
+### 13.4 Correção de tempo e hora solar
 
 **Ideia física.** Converter a hora do relógio (no fuso `tz`) para a **hora solar local** real do ponto (longitude `lon`), combinando o deslocamento de longitude com a EoT.
 
@@ -282,7 +452,7 @@ H   = 15° · (LST − 12)               [ângulo horário; 15°/h, 0 ao meio-di
 
 **Código.** Dentro de `sunPos()` em `src/Sun.cpp` e `pos()` em `src/WebPortal.cpp`.
 
-### 7.5 Elevação (altura) do sol
+### 13.5 Elevação (altura) do sol
 
 **Ideia física.** Quão alto o sol está acima do horizonte, dado o ângulo horário `H`, a latitude `φ` e a declinação `δ`.
 
@@ -304,7 +474,7 @@ float e = asinf(se);   *el = e * DEGc;
 
 Idêntica em `pos()` (JS), com `se` limitado a [−1, 1] antes do arcsin para evitar erro numérico.
 
-### 7.6 Azimute do sol
+### 13.6 Azimute do sol
 
 **Ideia física.** A direção da bússola de onde vem o sol (0°=Norte, 90°=Leste, 180°=Sul, 270°=Oeste).
 
@@ -324,7 +494,7 @@ float A = acosf(cA)*DEGc;
 if (sinf(H) > 0) A = 360 - A;
 ```
 
-### 7.7 Nascer, pôr e meio‑dia solar
+### 13.7 Nascer, pôr e meio‑dia solar
 
 **Ideia física.** O sol nasce/se põe quando a elevação cruza o horizonte (el=0). Resolvendo a equação da elevação para `el=0` dá o ângulo horário do nascer/pôr `H0`.
 
@@ -352,7 +522,7 @@ o->rise = noon - H0; o->set = noon + H0; o->dayLen = 2*H0;
 
 e `times()` em `src/WebPortal.cpp` (mesma conta, com as mensagens "sol não nasce/se põe hoje").
 
-### 7.8 Insolação na fachada
+### 13.8 Insolação na fachada
 
 **Ideia física.** Saber por quanto tempo o sol bate **diretamente** numa parede orientada para um certo azimute (`facadeAz`). O sol bate na fachada quando está acima do horizonte **e** vindo de um lado em que a parede o "vê" — ou seja, quando a diferença angular entre o azimute do sol e o da fachada é menor que 90°.
 
@@ -377,7 +547,7 @@ for (float t = o->rise; t <= o->set; t += 1.0f/60.0f) {
 
 e o mesmo laço em JS (`calc()` em `src/WebPortal.cpp`), que ainda guarda a janela de horários (`win[]`).
 
-### 7.9 Sombra ao meio‑dia
+### 13.9 Sombra ao meio‑dia
 
 **Ideia física.** O comprimento da sombra de um objeto vertical de altura `h` depende de quão alto está o sol: quanto mais baixo o sol, mais longa a sombra. É trigonometria pura.
 
@@ -397,13 +567,89 @@ o->shadowNoon = (el > 1) ? (sunP.objH / tanf(el*RAD)) : -1;
 
 e em JS (`calc()` em `src/WebPortal.cpp`): `sh = eln>1 ? hh/Math.tan(eln*R) : null`.
 
-### 7.10 Desenho da carta solar
+### 13.10 Desenho da carta solar
 
 A função `Sun_Path()` (`src/Sun.cpp`) gera N pontos `(azimute, elevação)` ao longo do dia, do nascer ao pôr, para desenhar a curva. Na página web, a função `chart()` desenha o mesmo em **SVG** (eixo X = azimute 0–360° com marcas N/L/S/O, eixo Y = altura 0–90°), com uma linha tracejada laranja marcando a orientação da fachada. Os parâmetros padrão (São Paulo) estão em `sunP = { -23.55, -46.63, -3.0, 0.0, 3.0 }` (lat, lon, fuso, fachada, altura).
 
+### 13.11 Beiral para sombrear a janela (web)
+
+**Ideia física.** Para barrar o sol do meio‑dia (o mais quente) numa janela, projeta‑se um beiral horizontal acima dela. Quanto mais alto o sol ao meio‑dia (`elN`), mais curto basta o beiral para sombrear 1 m de janela — é a inversa da conta de sombra (item 13.9, com altura = 1 m).
+
+**Fórmula.**
+
+```
+beiral (por m de janela) = 1 / tan(elevação_meio-dia)
+```
+
+(só é exibido quando o sol ao meio‑dia está razoavelmente alto, `elN > 5°`; abaixo disso o beiral ficaria absurdamente longo e mostra `--`).
+
+**Código.** `calc()` em `src/WebPortal.cpp`:
+
+```js
+const eln = pos(lat,lon,tz,N,T.noon).el;          // elevacao ao meio-dia
+... eln>5 ? (1/Math.tan(eln*R)).toFixed(2)+' m' : '--'
+```
+
+### 13.12 Painel solar — inclinação ótima (web)
+
+**Ideia física.** Para o ano todo, a regra prática é inclinar o painel num ângulo igual à **latitude do local**, voltado para o **equador** (Norte no hemisfério Sul, Sul no hemisfério Norte). Assim o painel fica, em média, mais perpendicular ao sol.
+
+**Fórmula (regra prática).**
+
+```
+inclinação ótima ≈ | latitude |
+orientação       = Norte  (se lat < 0)  /  Sul  (se lat > 0)
+```
+
+**Código.** `calc()` em `src/WebPortal.cpp`:
+
+```js
+~${Math.abs(lat).toFixed(0)}° p/ ${lat<0?'Norte':'Sul'}
+```
+
+É uma **aproximação** (não considera ajuste sazonal nem perdas atmosféricas); serve de ponto de partida para instalação.
+
+### 13.13 Melhor orientação dos ambientes (web)
+
+A mesma lógica de hemisfério dá dicas de projeto, sem fórmula nova:
+
+| Item | Hemisfério Sul (lat < 0) | Hemisfério Norte (lat > 0) |
+|---|---|---|
+| Melhor face (sol o dia todo) | Norte | Sul |
+| Sol da manhã / da tarde | Leste / Oeste | Leste / Oeste |
+| Face mais fresca (depósito) | Sul | Norte |
+
+**Código.** `calc()` em `src/WebPortal.cpp` (ternários `lat<0?...`).
+
+### 13.14 Máscara de sombreamento — horas de sol por mês (web)
+
+**Ideia física.** Um gráfico de 12 barras (uma por mês) mostrando **quantas horas por dia** o sol bate na fachada escolhida, no dia 15 de cada mês. Revela a sazonalidade da insolação da parede ao longo do ano.
+
+**Como é calculado.** Para cada mês toma‑se o dia 15 (`N = dia_cumulativo + 15`), varre‑se o dia do nascer ao pôr em passos de 2 minutos e soma‑se o tempo em que o sol está acima do horizonte **e** vindo de um lado que a fachada "vê" (mesma condição da insolação na fachada, item 13.8):
+
+```
+para cada mês m (dia 15):
+    horas = Σ (2/60)  para t de rise…set, passo 2 min,
+            enquanto  el > 0  E  cos(azimute_sol − fachada) > 0
+```
+
+A altura de cada barra é normalizada pelo mês de maior insolação (`max(hrs)`).
+
+**Código.** `maskBars()` em `src/WebPortal.cpp`:
+
+```js
+for (let m=0; m<12; m++){ let N=cum[m]+15, T=times(lat,lon,tz,N), h=0;
+  if(!T.none){ for(let t=T.rise; t<=T.set; t+=2/60){
+    let p=pos(lat,lon,tz,N,t);
+    if(p.el>0 && Math.cos((p.az-fac)*R)>0) h+=2/60; } }
+  hrs.push(h); }
+```
+
+(É a mesma física dos itens 13.5–13.8, repetida mês a mês; meses de noite/dia polar — `T.none` — entram com 0 h.)
+
 ---
 
-## 🔌 8. Como foi feita a conexão (hardware)
+## 🔌 14. Como foi feita a conexão (hardware)
 
 Tudo roda numa **placa única** — a Waveshare ESP32‑S3‑Touch‑LCD‑1.46B. Não há fios externos nem módulos separados: o display, o toque, o IMU, o RTC, o microfone, a bateria e o expansor já vêm integrados e ligados ao ESP32‑S3 por três barramentos.
 
@@ -447,7 +693,7 @@ A leitura/escrita real é feita pelos drivers Waveshare: `Display_SPD2010` + `es
 
 ---
 
-## 📶 9. Como funciona o WiFi / servidor
+## 📶 15. Como funciona o WiFi / servidor
 
 **Ideia.** O celular não precisa de internet: a própria placa **cria uma rede WiFi** (modo Access Point) e serve as páginas. Tudo é offline.
 
@@ -487,7 +733,7 @@ O servidor HTTP roda na porta 80. No loop principal, `WebPortal_Loop()` chama `s
 
 - **Página `/` (ao vivo).** O JavaScript faz `fetch('/live')` a cada 1,5 s e `fetch('/data')` a cada 3 s, atualizando a tela do celular sem recarregar.
 - **Acertar relógio.** O botão lê `new Date()` do celular e envia para `/settime`, que escreve no RTC PCF85063 via `PCF85063_Set_All()`. Assim os cálculos solares usam a data/hora corretas mesmo sem internet.
-- **Página `/sol`.** Todo o cálculo astronômico (itens 7.x) roda **no navegador**, em JavaScript — a placa não precisa calcular nada para essa página. Recursos extras: **GPS do celular** (`navigator.geolocation`) e **bússola** (`DeviceOrientation`) para preencher latitude/longitude e a orientação da fachada automaticamente.
+- **Página `/sol`.** Todo o cálculo astronômico (itens 13.x) roda **no navegador**, em JavaScript — a placa não precisa calcular nada para essa página. Recursos extras: **GPS do celular** (`navigator.geolocation`) e **bússola** (`DeviceOrientation`) para preencher latitude/longitude e a orientação da fachada automaticamente.
 - **Botão "Mostrar na tela do ESP".** Envia os parâmetros para `/setsol`, que atualiza a struct global `sunP`. Aí a placa passa a desenhar a carta solar na própria tela (menu SOL) com o mesmo local/fachada escolhidos no celular — garantindo que a versão em C (`src/Sun.cpp`) e a versão em JS produzam o mesmo resultado.
 
 ---
@@ -496,10 +742,11 @@ O servidor HTTP roda na porta 80. No loop principal, `WebPortal_Loop()` chama `s
 
 | Arquivo | Conteúdo |
 |---|---|
-| `src/LevelApp.cpp` | Ângulos (roll/pitch), filtro, nível, prumo, declividade %, transferidor, normas |
+| `src/LevelApp.cpp` | Ângulos (roll/pitch), filtro, nível, prumo, declividade %, transferidor, conversor, esquadro, planeza, perfil, normas, calibração `gCalR/gCalP`, bateria % |
 | `src/Mic_dB.cpp` | Decibelímetro: DC, RMS, dB, calibração `SPL_REF` |
+| `src/BAT_Driver.cpp` | Leitura da tensão da bateria (ADC GPIO8 → volts) |
 | `src/Sun.cpp` / `src/Sun.h` | Astronomia solar em C (tela do ESP) |
-| `src/WebPortal.cpp` / `src/WebPortal.h` | AP WiFi + servidor HTTP + páginas HTML/JS (mesma conta solar em JavaScript) |
+| `src/WebPortal.cpp` / `src/WebPortal.h` | AP WiFi + servidor HTTP + páginas HTML/JS (conta solar em JS: beiral, painel solar, máscara de sombreamento) |
 
 ---
 
