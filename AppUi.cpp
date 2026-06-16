@@ -8,21 +8,22 @@
 #include "AppUi.h"
 #include "LevelApp.h"
 #include "WebPortal.h"
+#include "SunApp.h"
 
-enum { ST_SPLASH, ST_MENU, ST_TOOL, ST_DATA };
+enum { ST_SPLASH, ST_MENU, ST_TOOL, ST_DATA, ST_SUN };
 static int      st = ST_SPLASH;
 static uint32_t splashStart = 0;
 
-static lv_obj_t *splashCont, *menuCont, *toolCont, *dataCont;
+static lv_obj_t *splashCont, *menuCont, *toolCont, *dataCont, *sunCont;
 
-#define NCARDS 6
-// Cartoes do menu (5 ferramentas + DADOS/WiFi)
+#define NCARDS 7
+// Cartoes do menu (5 ferramentas + SOL + DADOS/WiFi)
 static const char *CARD_NAME[NCARDS] =
-    {"NIVEL", "PRUMO", "DECLIVIDADE", "TRANSFERIDOR", "RUIDO", "DADOS"};
+    {"NIVEL", "PRUMO", "DECLIVIDADE", "TRANSFERIDOR", "RUIDO", "SOL", "DADOS"};
 static const char *CARD_SUB[NCARDS] =
-    {"bolha 2D", "verticalidade", "caimento %", "angulo", "decibelimetro", "WiFi + celular"};
+    {"bolha 2D", "verticalidade", "caimento %", "angulo", "decibelimetro", "carta solar", "WiFi + celular"};
 static const uint32_t CARD_COL[NCARDS] =
-    {0x2563eb, 0x7c3aed, 0x0891b2, 0xca8a04, 0xdc2626, 0x0f766e};
+    {0x2563eb, 0x7c3aed, 0x0891b2, 0xca8a04, 0xdc2626, 0xb45309, 0x0f766e};
 
 static void vis(lv_obj_t *o, bool on) {
     if (!o) return;
@@ -35,13 +36,15 @@ static void show(int state) {
     vis(menuCont,   state == ST_MENU);
     vis(toolCont,   state == ST_TOOL);
     vis(dataCont,   state == ST_DATA);
+    vis(sunCont,    state == ST_SUN);
 }
 
 static void onCard(lv_event_t *e) {
     lv_obj_t *card = lv_event_get_target(e);
     int idx = (int)(intptr_t)lv_obj_get_user_data(card);
-    if (idx == 5) AppUi_ShowData();
-    else          AppUi_OpenTool(idx);
+    if      (idx == 5) AppUi_ShowSun();
+    else if (idx == 6) AppUi_ShowData();
+    else               AppUi_OpenTool(idx);
 }
 
 // ---- SPLASH ---------------------------------------------------------------
@@ -208,6 +211,14 @@ void AppUi_Init() {
 
     buildData(scr);
 
+    sunCont = lv_obj_create(scr);
+    lv_obj_set_size(sunCont, 412, 412);
+    lv_obj_center(sunCont);
+    lv_obj_set_style_radius(sunCont, 0, 0);
+    lv_obj_set_style_border_width(sunCont, 0, 0);
+    lv_obj_set_style_pad_all(sunCont, 0, 0);
+    SunApp_Build(sunCont);
+
     splashStart = millis();
     show(ST_SPLASH);
 }
@@ -225,4 +236,6 @@ void AppUi_OpenTool(int mode) {
 
 void AppUi_ShowMenu()   { show(ST_MENU); }
 void AppUi_ShowData()   { show(ST_DATA); }
+void AppUi_ShowSun()    { show(ST_SUN); }
 bool AppUi_ToolActive() { return st == ST_TOOL; }
+bool AppUi_SunActive()  { return st == ST_SUN; }

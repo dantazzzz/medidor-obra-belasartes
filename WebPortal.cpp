@@ -10,6 +10,7 @@
 #include "DataLog.h"
 #include "LevelApp.h"
 #include "RTC_PCF85063.h"
+#include "Sun.h"
 
 static WebServer server(80);
 
@@ -94,6 +95,8 @@ a.back{color:#38bdf8;font-size:13px;text-decoration:none}
 </div>
 <div class="row"><button class="b2" onclick="calc()">Calcular</button>
 <button class="b1" onclick="geo()">Usar GPS do celular</button></div>
+<div class="row"><button class="b1" onclick="bussola()" style="background:#7c3aed">Bussola do cel</button>
+<button class="b2" onclick="send()" style="background:#0f766e">Mostrar na tela do ESP</button></div>
 <div class="sub" id="msg" style="margin-top:8px"></div></div>
 <div class="card" id="out"></div>
 <div class="card"><div class="sub">Carta solar (azimute x altura do sol)</div><div id="chart"></div></div>
@@ -139,6 +142,14 @@ function geo(){if(!navigator.geolocation){$('msg').textContent='navegador sem GP
 $('msg').textContent='pedindo GPS...';navigator.geolocation.getCurrentPosition(
 p=>{$('lat').value=p.coords.latitude.toFixed(4);$('lon').value=p.coords.longitude.toFixed(4);$('msg').textContent='GPS ok';calc();},
 e=>{$('msg').textContent='GPS bloqueado (pagina http) - digite lat/lon na mao. '+e.message;},{timeout:8000,enableHighAccuracy:true});}
+function send(){const q=`lat=${$('lat').value}&lon=${$('lon').value}&tz=${$('tz').value}&fac=${$('fac').value}&h=${$('h').value}`;
+fetch('/setsol?'+q).then(()=>{$('msg').textContent='Enviado! Veja a carta solar na tela do ESP (menu SOL).';}).catch(()=>{$('msg').textContent='falhou ao enviar';});}
+function bussola(){function ok(e){let hd=(e.webkitCompassHeading!=null)?e.webkitCompassHeading:((e.alpha!=null)?(360-e.alpha):null);
+if(hd!=null){$('fac').value=(Math.round(hd/45)*45)%360;$('msg').textContent='bussola: '+Math.round(hd)+' graus -> fachada ajustada';calc();
+window.removeEventListener('deviceorientationabsolute',ok);window.removeEventListener('deviceorientation',ok);}}
+if(typeof DeviceOrientationEvent!=='undefined'&&DeviceOrientationEvent.requestPermission){
+DeviceOrientationEvent.requestPermission().then(p=>{if(p==='granted'){window.addEventListener('deviceorientationabsolute',ok);window.addEventListener('deviceorientation',ok);}else $('msg').textContent='permissao da bussola negada';}).catch(()=>{$('msg').textContent='bussola bloqueada (precisa HTTPS)';});
+}else{window.addEventListener('deviceorientationabsolute',ok);window.addEventListener('deviceorientation',ok);setTimeout(()=>{if(!/bussola/.test($('msg').textContent))$('msg').textContent='bussola indisponivel nesta pagina (http)';},1500);}}
 (function(){const n=new Date();$('dt').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');calc();})();
 </script></body></html>)SOL";
 
@@ -194,6 +205,15 @@ static void handleSetTime() {
     server.send(200, "text/plain", "ok");
 }
 
+static void handleSetSol() {                 // celular envia local/fachada p/ a tela do ESP
+    if (server.hasArg("lat")) sunP.lat = server.arg("lat").toFloat();
+    if (server.hasArg("lon")) sunP.lon = server.arg("lon").toFloat();
+    if (server.hasArg("tz"))  sunP.tz  = server.arg("tz").toFloat();
+    if (server.hasArg("fac")) sunP.facadeAz = server.arg("fac").toFloat();
+    if (server.hasArg("h"))   sunP.objH = server.arg("h").toFloat();
+    server.send(200, "text/plain", "ok");
+}
+
 // ---- API ------------------------------------------------------------------
 void WebPortal_Init() {
     WiFi.mode(WIFI_AP);
@@ -205,6 +225,7 @@ void WebPortal_Init() {
     server.on("/data.csv", handleCsv);
     server.on("/clear", handleClear);
     server.on("/settime", handleSetTime);
+    server.on("/setsol", handleSetSol);
     server.begin();
 }
 

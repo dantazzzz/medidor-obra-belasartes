@@ -18,6 +18,7 @@
 #include "LVGL_Driver.h"
 #include "LevelApp.h"
 #include "AppUi.h"
+#include "SunApp.h"
 #include "Mic_dB.h"
 #include "WebPortal.h"
 
@@ -68,6 +69,8 @@ void loop() {
     AppUi_Loop();                              // transicao do splash
     if (AppUi_ToolActive())                    // so atualiza a leitura na ferramenta aberta
         LevelApp_Update(Accel.x, Accel.y, Accel.z);
+    if (AppUi_SunActive())                     // atualiza a carta solar
+        SunApp_Update();
     WebPortal_Loop();                          // atende o celular (servidor HTTP)
     Lvgl_Loop();
     vTaskDelay(pdMS_TO_TICKS(15));

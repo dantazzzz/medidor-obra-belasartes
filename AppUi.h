@@ -5,4 +5,6 @@ void AppUi_Loop();          // no loop: cuida do timeout do splash
 void AppUi_OpenTool(int mode);
 void AppUi_ShowMenu();
 void AppUi_ShowData();      // tela com instrucoes de WiFi
-bool AppUi_ToolActive();    // true quando uma ferramenta esta aberta (atualizar leitura)
+void AppUi_ShowSun();       // ferramenta carta solar
+bool AppUi_ToolActive();    // true quando uma ferramenta de medicao esta aberta
+bool AppUi_SunActive();     // true quando a carta solar esta aberta
