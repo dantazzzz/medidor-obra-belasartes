@@ -37,7 +37,8 @@ th{color:#94a3b8;font-weight:600}.empty{color:#64748b;text-align:center;padding:
 </style></head><body>
 <header><h1>Medidor de Obra</h1><div class="sub">Belas Artes - FEBASP</div></header>
 <div class="wrap">
-<a class="btn b1" href="/sol" style="display:block;margin-bottom:12px;text-decoration:none;background:#b45309">Sol / Insolacao (carta solar offline)</a>
+<a class="btn b1" href="/sol" style="display:block;margin-bottom:8px;text-decoration:none;background:#b45309">Sol / Insolacao (carta solar offline)</a>
+<a class="btn b1" href="/calc" style="display:block;margin-bottom:12px;text-decoration:none;background:#0e7490">Calculadora de Obra</a>
 <div class="card"><div class="mode" id="mode">--</div>
 <div class="live"><span class="big" id="val">--</span><span class="unit" id="unit"></span></div></div>
 <div class="card"><div class="row">
@@ -136,7 +137,9 @@ $('out').innerHTML=`<div class="kv"><span>Nascer do sol</span><b>${fmt(T.rise)}<
 <div class="kv"><span>Altura max. do sol</span><b>${maxel.toFixed(0)}&#176;</b></div><hr>
 <div class="kv"><span>Sol direto na fachada</span><b>${facH.toFixed(1)} h</b></div>
 <div class="kv"><span>Janela de sol na fachada</span><b>${win.length?fmt(win[0])+' - '+fmt(win[win.length-1]):'nunca'}</b></div>
-<div class="kv"><span>Sombra ao meio-dia (h=${hh}m)</span><b>${sh!=null?sh.toFixed(2)+' m':'--'}</b></div>`;
+<div class="kv"><span>Sombra ao meio-dia (h=${hh}m)</span><b>${sh!=null?sh.toFixed(2)+' m':'--'}</b></div><hr>
+<div class="kv"><span>Beiral p/ sombrear (por m de janela)</span><b>${eln>5?(1/Math.tan(eln*R)).toFixed(2)+' m':'--'}</b></div>
+<div class="kv"><span>Painel solar: inclinacao otima</span><b>~${Math.abs(lat).toFixed(0)}&#176; p/ ${lat<0?'Norte':'Sul'}</b></div>`;
 $('chart').innerHTML=chart(pts,fac);}
 function geo(){if(!navigator.geolocation){$('msg').textContent='navegador sem GPS';return;}
 $('msg').textContent='pedindo GPS...';navigator.geolocation.getCurrentPosition(
@@ -153,9 +156,62 @@ DeviceOrientationEvent.requestPermission().then(p=>{if(p==='granted'){window.add
 (function(){const n=new Date();$('dt').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');calc();})();
 </script></body></html>)SOL";
 
+// ---- pagina CALCULADORA DE OBRA (offline) ---------------------------------
+static const char PAGE_CALC[] PROGMEM = R"CALC(<!doctype html><html lang="pt-br"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calculadora de Obra</title><style>
+*{box-sizing:border-box}body{margin:0;background:#0b0f17;color:#e5e7eb;font-family:system-ui,Segoe UI,Roboto,Arial}
+header{padding:14px;text-align:center;background:#111827;border-bottom:1px solid #1f2937}
+h1{margin:0;font-size:18px}.sub{color:#94a3b8;font-size:12px;margin-top:4px}
+.wrap{padding:14px;max-width:640px;margin:0 auto}
+.card{background:#111827;border:1px solid #1f2937;border-radius:14px;padding:14px;margin-bottom:12px}
+h3{margin:0 0 10px;font-size:15px;color:#22d3ee}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+label{font-size:12px;color:#94a3b8;display:flex;flex-direction:column;gap:4px}
+input{background:#0b0f17;border:1px solid #334155;color:#e5e7eb;border-radius:8px;padding:9px;font-size:15px;width:100%}
+.res{margin-top:10px;font-size:15px;color:#e5e7eb}.res b{color:#fff}
+a.back{color:#38bdf8;font-size:13px;text-decoration:none;display:inline-block;margin-bottom:10px}
+</style></head><body>
+<header><h1>Calculadora de Obra</h1><div class="sub">contas rapidas - offline</div></header>
+<div class="wrap"><a class="back" href="/">&lt; voltar</a>
+<div class="card"><h3>Concreto (volume)</h3><div class="g3">
+<label>Comp (m)<input id="cL" type="number" value="3" oninput="cc()"></label>
+<label>Larg (m)<input id="cW" type="number" value="2" oninput="cc()"></label>
+<label>Esp (m)<input id="cH" type="number" value="0.1" oninput="cc()"></label></div>
+<div class="res" id="cR"></div></div>
+<div class="card"><h3>Tijolos / blocos</h3><div class="g2">
+<label>Area da parede (m2)<input id="tA" type="number" value="10" oninput="tc()"></label>
+<label>Pecas por m2<input id="tN" type="number" value="25" oninput="tc()"></label></div>
+<div class="res" id="tR"></div></div>
+<div class="card"><h3>Escada (Blondel: 2e+p = 63 a 65 cm)</h3>
+<label>Altura total / desnivel (m)<input id="eH" type="number" value="2.8" oninput="ec()"></label>
+<div class="res" id="eR"></div></div>
+<div class="card"><h3>Pintura</h3><div class="g3">
+<label>Area (m2)<input id="pA" type="number" value="30" oninput="pc()"></label>
+<label>Rend (m2/L)<input id="pR" type="number" value="10" oninput="pc()"></label>
+<label>Demaos<input id="pD" type="number" value="2" oninput="pc()"></label></div>
+<div class="res" id="pRr"></div></div>
+<div class="card"><h3>Argamassa (traco 1:N)</h3><div class="g2">
+<label>Volume (m3)<input id="aV" type="number" value="0.5" oninput="ac()"></label>
+<label>Traco  1:<input id="aT" type="number" value="3" oninput="ac()"></label></div>
+<div class="res" id="aR"></div></div>
+</div><script>
+const $=id=>document.getElementById(id);
+function cc(){let v=$('cL').value*$('cW').value*$('cH').value;
+$('cR').innerHTML=`<b>${v.toFixed(3)} m&sup3;</b> &middot; ~${Math.ceil(v*7)} sacos de cimento (mistura media)`;}
+function tc(){let n=$('tA').value*$('tN').value;$('tR').innerHTML=`<b>${Math.ceil(n)}</b> pecas &middot; com 5% de perda: <b>${Math.ceil(n*1.05)}</b>`;}
+function ec(){let H=$('eH').value*100;let n=Math.max(1,Math.round(H/17.5));let e=H/n;let p=64-2*e;let s=2*e+p;let ok=(s>=63&&s<=65);
+$('eR').innerHTML=`<b>${n} degraus</b> &middot; espelho <b>${e.toFixed(1)} cm</b> &middot; piso <b>${p.toFixed(1)} cm</b><br><span style="font-size:13px;color:${ok?'#22c55e':'#f59e0b'}">2e+p = ${s.toFixed(1)} cm ${ok?'(confortavel)':'(fora do ideal)'}</span>`;}
+function pc(){let L=$('pA').value/$('pR').value*$('pD').value;$('pRr').innerHTML=`<b>${L.toFixed(1)} L</b> de tinta (${$('pD').value} demaos)`;}
+function ac(){let V=+$('aV').value,T=+$('aT').value;let cim=V/(1+T),are=V*T/(1+T);
+$('aR').innerHTML=`cimento ~<b>${(cim*1000).toFixed(0)} L</b> (~${Math.ceil(cim/0.0357)} sacos 50kg) &middot; areia ~<b>${are.toFixed(2)} m&sup3;</b>`;}
+cc();tc();ec();pc();ac();
+</script></body></html>)CALC";
+
 // ---- handlers -------------------------------------------------------------
 static void handleRoot() { server.send_P(200, "text/html", PAGE); }
 static void handleSol()  { server.send_P(200, "text/html", PAGE_SOL); }
+static void handleCalc() { server.send_P(200, "text/html", PAGE_CALC); }
 
 static void handleLive() {
     char buf[96];
@@ -220,6 +276,7 @@ void WebPortal_Init() {
     WiFi.softAP(AP_SSID, AP_PASS);
     server.on("/", handleRoot);
     server.on("/sol", handleSol);
+    server.on("/calc", handleCalc);
     server.on("/live", handleLive);
     server.on("/data", handleData);
     server.on("/data.csv", handleCsv);

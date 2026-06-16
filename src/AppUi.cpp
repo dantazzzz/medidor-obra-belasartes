@@ -18,14 +18,17 @@ static uint32_t splashStart = 0;
 
 static lv_obj_t *splashCont, *menuCont, *toolCont, *dataCont, *sunCont, *setCont;
 
-#define NCARDS 8
-// Cartoes do menu (5 ferramentas + SOL + DADOS + AJUSTES)
+#define NCARDS 11
+// Cartoes do menu (8 ferramentas + SOL + DADOS + AJUSTES)
 static const char *CARD_NAME[NCARDS] =
-    {"NIVEL", "PRUMO", "DECLIVIDADE", "TRANSFERIDOR", "RUIDO", "SOL", "DADOS", "AJUSTES"};
+    {"NIVEL", "PRUMO", "DECLIVIDADE", "TRANSFERIDOR", "RUIDO",
+     "CONVERSOR", "ESQUADRO", "PLANEZA", "SOL", "DADOS", "AJUSTES"};
 static const char *CARD_SUB[NCARDS] =
-    {"bolha 2D", "verticalidade", "caimento %", "angulo", "decibelimetro", "carta solar", "WiFi + celular", "calibrar/brilho"};
+    {"bolha 2D", "verticalidade", "caimento %", "angulo", "decibelimetro",
+     "graus/%/mm-m", "quina 90", "planeza/empeno", "carta solar", "WiFi + celular", "calibrar/brilho"};
 static const uint32_t CARD_COL[NCARDS] =
-    {0x2563eb, 0x7c3aed, 0x0891b2, 0xca8a04, 0xdc2626, 0xb45309, 0x0f766e, 0x64748b};
+    {0x2563eb, 0x7c3aed, 0x0891b2, 0xca8a04, 0xdc2626,
+     0x0d9488, 0x65a30d, 0x9333ea, 0xb45309, 0x0f766e, 0x64748b};
 static lv_obj_t *dotObjs[NCARDS];   // indicador de paginas do menu
 
 static void vis(lv_obj_t *o, bool on) {
@@ -46,10 +49,10 @@ static void show(int state) {
 static void onCard(lv_event_t *e) {
     lv_obj_t *card = lv_event_get_target(e);
     int idx = (int)(intptr_t)lv_obj_get_user_data(card);
-    if      (idx == 5) AppUi_ShowSun();
-    else if (idx == 6) AppUi_ShowData();
-    else if (idx == 7) AppUi_ShowSettings();
-    else               AppUi_OpenTool(idx);
+    if      (idx == 8)  AppUi_ShowSun();
+    else if (idx == 9)  AppUi_ShowData();
+    else if (idx == 10) AppUi_ShowSettings();
+    else                AppUi_OpenTool(idx);     // 0..7 abrem ferramentas
 }
 
 // destaca o pontinho do cartao que esta centralizado (segue o swipe)

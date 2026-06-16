@@ -14,6 +14,8 @@
 #include "Mic_dB.h"
 #include "DataLog.h"
 #include "Beep.h"
+#include "BAT_Driver.h"
+#include "RTC_PCF85063.h"
 
 extern void AppUi_ShowMenu();      // volta para o menu (definido em AppUi.cpp)
 
@@ -31,7 +33,7 @@ static bool  gBeep = true;         // assistente sonoro de nivelamento
 // --- Objetos da UI ----------------------------------------------------------
 static lv_obj_t *root;
 static lv_obj_t *bubble, *ringOuter, *ringTol, *hLine, *vLine;
-static lv_obj_t *lblMode, *lblBig, *lblUnit, *lblStatus, *lblHint, *lblNorm;
+static lv_obj_t *lblMode, *lblBig, *lblUnit, *lblStatus, *lblHint, *lblNorm, *lblBar;
 
 // --- Estado -----------------------------------------------------------------
 static int   g_mode = 0;
@@ -41,12 +43,14 @@ static float fRoll = 0, fPitch = 0;
 static float curR = 0, curP = 0;
 static float heldR = 0, heldP = 0;
 static float dbMin = 999, dbMax = 0;
+static float planMin = 999, planMax = 0; // PLANEZA: faixa de desvio
 static float g_lastBig = 0;             // ultimo valor exibido (p/ CAPTURAR)
 static char  g_lastUnit[6] = "GRAUS";
 static int   g_saved = 0;               // contador p/ mostrar "SALVO"
 
-static const char *MODE_NAMES[5] =
-    {"NIVEL", "PRUMO", "DECLIVIDADE", "TRANSFERIDOR", "RUIDO"};
+static const char *MODE_NAMES[8] =
+    {"NIVEL", "PRUMO", "DECLIVIDADE", "TRANSFERIDOR", "RUIDO",
+     "CONVERSOR", "ESQUADRO", "PLANEZA"};
 
 // Presets de norma p/ DECLIVIDADE (% ; valor < 0 = sem limite). Guia, confira a norma.
 struct Norm { const char *name; float mn; float mx; };
@@ -73,7 +77,10 @@ static void onBack(lv_event_t *e)  { (void)e; AppUi_ShowMenu(); }
 static void onZero(lv_event_t *e) {
     (void)e;
     if (g_mode == 4) { dbMin = 999; dbMax = 0; }
-    else             { roll0 = fRoll; pitch0 = fPitch; }
+    else {
+        roll0 = fRoll; pitch0 = fPitch;
+        if (g_mode == 7) { planMin = 999; planMax = 0; }   // PLANEZA: reinicia a faixa
+    }
     g_hold = false;
 }
 static void onHold(lv_event_t *e) {
@@ -159,6 +166,12 @@ void LevelApp_Build(lv_obj_t *parent) {
     lv_obj_align(lblMode, LV_ALIGN_TOP_MID, 0, 56);
     lv_label_set_text(lblMode, MODE_NAMES[0]);
 
+    lblBar = lv_label_create(root);                 // barra de status: hora + bateria
+    lv_obj_set_style_text_font(lblBar, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(lblBar, lv_color_hex(0x5b6673), 0);
+    lv_obj_align(lblBar, LV_ALIGN_TOP_MID, 0, 30);
+    lv_label_set_text(lblBar, "");
+
     lblBig = lv_label_create(root);
     lv_obj_set_style_text_font(lblBig, &lv_font_montserrat_40, 0);
     lv_obj_set_style_text_color(lblBig, lv_color_hex(0xffffff), 0);
@@ -207,6 +220,7 @@ void LevelApp_SetMode(int mode) {
     g_mode = mode;
     g_hold = false;
     if (mode == 4) { dbMin = 999; dbMax = 0; }
+    if (mode == 7) { planMin = 999; planMax = 0; }
 }
 
 const char *LevelApp_ModeName() { return MODE_NAMES[g_mode]; }
@@ -248,6 +262,11 @@ void LevelApp_Update(float ax, float ay, float az) {
                   if (db < dbMin) dbMin = db;
                   if (db > dbMax) dbMax = db;
                   big = db; unit = "dB"; break; }
+        case 5: bx = r; by = p; big = sqrtf(r * r + p * p); break;   // CONVERSOR
+        case 6: bx = r; by = p; big = sqrtf(r * r + p * p); break;   // ESQUADRO (alvo 90)
+        case 7: bx = r; by = p; big = sqrtf(r * r + p * p);          // PLANEZA
+                if (big < planMin) planMin = big;
+                if (big > planMax) planMax = big; break;
     }
     g_lastBig = big;
     strncpy(g_lastUnit, unit, sizeof(g_lastUnit) - 1); g_lastUnit[sizeof(g_lastUnit) - 1] = 0;
@@ -287,6 +306,17 @@ void LevelApp_Update(float ax, float ay, float az) {
     lv_label_set_text(lblBig, vbuf);
     lv_label_set_text(lblUnit, unit);
 
+    // barra de status (hora do RTC + bateria), atualizada devagar
+    static int barCtr = 0;
+    if (++barCtr >= 30) {
+        barCtr = 0;
+        int pct = (int)((BAT_analogVolts - 3.30f) / 0.90f * 100.0f);
+        if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+        char bb[24];
+        snprintf(bb, sizeof(bb), "%02d:%02d    %d%%", datetime.hour, datetime.minute, pct);
+        lv_label_set_text(lblBar, bb);
+    }
+
     // mensagem "SALVO" tem prioridade na dica
     bool showSaved = (g_saved > 0);
     if (g_saved > 0) g_saved--;
@@ -323,6 +353,37 @@ void LevelApp_Update(float ax, float ay, float az) {
             lv_label_set_text(lblStatus, "FORA");
         }
         lv_label_set_text(lblHint, showSaved ? "SALVO" : (g_hold ? "[ congelado ]" : ""));
+    }
+    else if (g_mode == 5) {                                  // CONVERSOR
+        lv_obj_set_style_text_color(lblBig, lv_color_hex(0xffffff), 0);
+        lv_obj_set_style_text_color(lblStatus, lv_color_hex(0x9aa7b4), 0);
+        char s1[40], s2[40];
+        snprintf(s1, sizeof(s1), "%.1f%%    %.0f mm/m",
+                 (double)(tanf(big / DEG) * 100.0f), (double)(tanf(big / DEG) * 1000.0f));
+        lv_label_set_text(lblStatus, s1);
+        if (big > 0.2f) snprintf(s2, sizeof(s2), "proporcao  1:%.0f", (double)(1.0f / tanf(big / DEG)));
+        else            snprintf(s2, sizeof(s2), "plano");
+        lv_label_set_text(lblHint, showSaved ? "SALVO" : s2);
+    }
+    else if (g_mode == 6) {                                  // ESQUADRO (alvo 90 graus)
+        float d = big - 90.0f;
+        bool ok = fabsf(d) < 1.0f;
+        lv_obj_set_style_text_color(lblBig, lv_color_hex(ok ? 0x22c55e : 0xffffff), 0);
+        lv_obj_set_style_text_color(lblStatus, lv_color_hex(ok ? 0x22c55e : 0xf59e0b), 0);
+        lv_label_set_text(lblStatus, ok ? "ESQUADRO OK (90)" : "");
+        char s[40];
+        if (ok) snprintf(s, sizeof(s), "quina reta");
+        else    snprintf(s, sizeof(s), "%+.1f de 90 graus", (double)d);
+        lv_label_set_text(lblHint, showSaved ? "SALVO" : s);
+    }
+    else if (g_mode == 7) {                                  // PLANEZA (faixa de desvio)
+        lv_obj_set_style_text_color(lblBig, lv_color_hex(0xffffff), 0);
+        lv_obj_set_style_text_color(lblStatus, lv_color_hex(0x38bdf8), 0);
+        char s[40];
+        snprintf(s, sizeof(s), "desvio: %.1f graus", (double)(planMax - planMin));
+        lv_label_set_text(lblStatus, s);
+        snprintf(s, sizeof(s), "min %.1f   max %.1f", (double)planMin, (double)planMax);
+        lv_label_set_text(lblHint, showSaved ? "SALVO" : s);
     }
     else {
         lv_obj_set_style_text_color(lblBig, lv_color_hex(0xffffff), 0);
