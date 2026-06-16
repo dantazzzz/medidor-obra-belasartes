@@ -8,19 +8,19 @@
 //  App proprio: LevelApp.* (UI + matematica do acelerometro).
 // ============================================================================
 #include <Arduino.h>
-#include "I2C_Driver.h"
-#include "TCA9554PWR.h"
-#include "Display_SPD2010.h"
-#include "Gyro_QMI8658.h"
-#include "RTC_PCF85063.h"
-#include "PWR_Key.h"
-#include "BAT_Driver.h"
-#include "LVGL_Driver.h"
-#include "LevelApp.h"
-#include "AppUi.h"
-#include "SunApp.h"
-#include "Mic_dB.h"
-#include "WebPortal.h"
+#include "src/I2C_Driver.h"
+#include "src/TCA9554PWR.h"
+#include "src/Display_SPD2010.h"
+#include "src/Gyro_QMI8658.h"
+#include "src/RTC_PCF85063.h"
+#include "src/PWR_Key.h"
+#include "src/BAT_Driver.h"
+#include "src/LVGL_Driver.h"
+#include "src/LevelApp.h"
+#include "src/AppUi.h"
+#include "src/SunApp.h"
+#include "src/Mic_dB.h"
+#include "src/WebPortal.h"
 
 // Task de segundo plano (core 0): so atualiza sensores. NAO toca na LVGL
 // (LVGL nao e thread-safe; a UI roda toda no loop()/core 1).

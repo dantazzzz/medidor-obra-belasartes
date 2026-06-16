@@ -24,6 +24,7 @@ static const char *CARD_SUB[NCARDS] =
     {"bolha 2D", "verticalidade", "caimento %", "angulo", "decibelimetro", "carta solar", "WiFi + celular"};
 static const uint32_t CARD_COL[NCARDS] =
     {0x2563eb, 0x7c3aed, 0x0891b2, 0xca8a04, 0xdc2626, 0xb45309, 0x0f766e};
+static lv_obj_t *dotObjs[NCARDS];   // indicador de paginas do menu
 
 static void vis(lv_obj_t *o, bool on) {
     if (!o) return;
@@ -45,6 +46,23 @@ static void onCard(lv_event_t *e) {
     if      (idx == 5) AppUi_ShowSun();
     else if (idx == 6) AppUi_ShowData();
     else               AppUi_OpenTool(idx);
+}
+
+// destaca o pontinho do cartao que esta centralizado (segue o swipe)
+static void onScroll(lv_event_t *e) {
+    lv_obj_t *c = lv_event_get_target(e);
+    lv_area_t a; lv_obj_get_coords(c, &a);
+    int mid = (a.x1 + a.x2) / 2, best = 0, bestd = 1 << 30;
+    uint32_t n = lv_obj_get_child_cnt(c);
+    for (uint32_t i = 0; i < n; i++) {
+        lv_area_t ca; lv_obj_get_coords(lv_obj_get_child(c, i), &ca);
+        int cc = (ca.x1 + ca.x2) / 2, d = (cc > mid) ? (cc - mid) : (mid - cc);
+        if (d < bestd) { bestd = d; best = (int)i; }
+    }
+    for (int i = 0; i < NCARDS; i++) {
+        lv_obj_set_size(dotObjs[i], i == best ? 16 : 7, 7);
+        lv_obj_set_style_bg_color(dotObjs[i], lv_color_hex(i == best ? 0xe2e8f0 : 0x374151), 0);
+    }
 }
 
 // ---- SPLASH ---------------------------------------------------------------
@@ -90,16 +108,23 @@ static void buildMenu(lv_obj_t *scr) {
     lv_obj_set_style_bg_color(menuCont, lv_color_hex(0x05070a), 0);
     lv_obj_set_style_bg_opa(menuCont, LV_OPA_COVER, 0);
 
+    // cabecalho minimalista
     lv_obj_t *title = lv_label_create(menuCont);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xe2e8f0), 0);
-    lv_label_set_text(title, "MEDIDOR DE OBRA");
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 40);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xf1f5f9), 0);
+    lv_label_set_text(title, "Medidor de Obra");
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 34);
+
+    lv_obj_t *sub = lv_label_create(menuCont);
+    lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(sub, lv_color_hex(0x475569), 0);
+    lv_label_set_text(sub, "Belas Artes");
+    lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 62);
 
     // carrossel: linha de cartoes com snap no centro
     lv_obj_t *car = lv_obj_create(menuCont);
-    lv_obj_set_size(car, 412, 280);
-    lv_obj_align(car, LV_ALIGN_CENTER, 0, 6);
+    lv_obj_set_size(car, 412, 250);
+    lv_obj_align(car, LV_ALIGN_CENTER, 0, 8);
     lv_obj_set_style_bg_opa(car, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(car, 0, 0);
     lv_obj_set_flex_flow(car, LV_FLEX_FLOW_ROW);
@@ -108,45 +133,63 @@ static void buildMenu(lv_obj_t *scr) {
     lv_obj_set_scroll_dir(car, LV_DIR_HOR);
     lv_obj_add_flag(car, LV_OBJ_FLAG_SCROLL_ONE);
     lv_obj_set_scrollbar_mode(car, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_pad_left(car, 66, 0);
-    lv_obj_set_style_pad_right(car, 66, 0);
-    lv_obj_set_style_pad_column(car, 18, 0);
+    lv_obj_set_style_pad_left(car, 76, 0);
+    lv_obj_set_style_pad_right(car, 76, 0);
+    lv_obj_set_style_pad_column(car, 16, 0);
+    lv_obj_add_event_cb(car, onScroll, LV_EVENT_SCROLL, NULL);
 
     for (int i = 0; i < NCARDS; i++) {
         lv_obj_t *card = lv_obj_create(car);
-        lv_obj_set_size(card, 280, 250);
+        lv_obj_set_size(card, 258, 224);
         lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_radius(card, 28, 0);
-        lv_obj_set_style_bg_color(card, lv_color_hex(CARD_COL[i]), 0);
-        lv_obj_set_style_border_width(card, 0, 0);
+        lv_obj_set_style_radius(card, 26, 0);
+        lv_obj_set_style_bg_color(card, lv_color_hex(0x0e131c), 0);
+        lv_obj_set_style_border_width(card, 1, 0);
+        lv_obj_set_style_border_color(card, lv_color_hex(0x1e293b), 0);
         lv_obj_set_style_shadow_width(card, 0, 0);
         lv_obj_set_user_data(card, (void *)(intptr_t)i);
         lv_obj_add_event_cb(card, onCard, LV_EVENT_CLICKED, NULL);
 
+        lv_obj_t *acc = lv_obj_create(card);            // acento de cor (minimalista)
+        lv_obj_set_size(acc, 46, 5);
+        lv_obj_align(acc, LV_ALIGN_TOP_MID, 0, 44);
+        lv_obj_clear_flag(acc, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(acc, 3, 0);
+        lv_obj_set_style_border_width(acc, 0, 0);
+        lv_obj_set_style_bg_color(acc, lv_color_hex(CARD_COL[i]), 0);
+
         lv_obj_t *n = lv_label_create(card);
         lv_obj_set_style_text_font(n, &lv_font_montserrat_22, 0);
-        lv_obj_set_style_text_color(n, lv_color_hex(0xffffff), 0);
+        lv_obj_set_style_text_color(n, lv_color_hex(0xf1f5f9), 0);
         lv_label_set_text(n, CARD_NAME[i]);
-        lv_obj_align(n, LV_ALIGN_CENTER, 0, -16);
+        lv_obj_align(n, LV_ALIGN_CENTER, 0, -4);
 
         lv_obj_t *s = lv_label_create(card);
         lv_obj_set_style_text_font(s, &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(s, lv_color_hex(0xe5e7eb), 0);
+        lv_obj_set_style_text_color(s, lv_color_hex(0x64748b), 0);
         lv_label_set_text(s, CARD_SUB[i]);
-        lv_obj_align(s, LV_ALIGN_CENTER, 0, 20);
-
-        lv_obj_t *go = lv_label_create(card);
-        lv_obj_set_style_text_font(go, &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(go, lv_color_hex(0xffffff), 0);
-        lv_label_set_text(go, "toque para abrir");
-        lv_obj_align(go, LV_ALIGN_BOTTOM_MID, 0, -16);
+        lv_obj_align(s, LV_ALIGN_CENTER, 0, 28);
     }
 
-    lv_obj_t *hint = lv_label_create(menuCont);
-    lv_obj_set_style_text_font(hint, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(hint, lv_color_hex(0x64748b), 0);
-    lv_label_set_text(hint, "<  arraste para o lado  >");
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -26);
+    // indicador de paginas (pontinhos que seguem o swipe)
+    lv_obj_t *dots = lv_obj_create(menuCont);
+    lv_obj_set_size(dots, 412, 18);
+    lv_obj_align(dots, LV_ALIGN_BOTTOM_MID, 0, -22);
+    lv_obj_set_style_bg_opa(dots, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(dots, 0, 0);
+    lv_obj_clear_flag(dots, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(dots, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(dots, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(dots, 6, 0);
+    for (int i = 0; i < NCARDS; i++) {
+        lv_obj_t *d = lv_obj_create(dots);
+        lv_obj_set_size(d, i == 0 ? 16 : 7, 7);
+        lv_obj_clear_flag(d, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(d, 4, 0);
+        lv_obj_set_style_border_width(d, 0, 0);
+        lv_obj_set_style_bg_color(d, lv_color_hex(i == 0 ? 0xe2e8f0 : 0x374151), 0);
+        dotObjs[i] = d;
+    }
 }
 
 // ---- DADOS / WiFi ---------------------------------------------------------
