@@ -228,27 +228,40 @@ static const char PAGE_CROQUI[] PROGMEM = R"CRO(<!doctype html><html lang="pt-br
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Croqui / Anotacoes</title><style>
 *{box-sizing:border-box}body{margin:0;background:#0b0f17;color:#e5e7eb;font-family:system-ui,Segoe UI,Roboto,Arial}
-header{padding:12px;text-align:center;background:#111827;border-bottom:1px solid #1f2937}
+header{padding:10px;text-align:center;background:#111827;border-bottom:1px solid #1f2937}
 h1{margin:0;font-size:17px}.sub{color:#94a3b8;font-size:12px;margin-top:3px}
-.wrap{padding:12px;max-width:680px;margin:0 auto}
-a.back{color:#38bdf8;font-size:13px;text-decoration:none;display:inline-block;margin-bottom:8px}
-input.room{width:100%;background:#0b0f17;border:1px solid #334155;color:#e5e7eb;border-radius:8px;padding:9px;font-size:15px;margin-bottom:8px}
+.wrap{padding:10px;max-width:680px;margin:0 auto}
+a.back{color:#38bdf8;font-size:13px;text-decoration:none;display:inline-block;margin-bottom:6px}
+.r1{display:flex;gap:6px;margin-bottom:6px}
+select,input{background:#0b0f17;border:1px solid #334155;color:#e5e7eb;border-radius:8px;padding:8px;font-size:14px}
+#rooms{flex:1}
+.mini{border:0;border-radius:8px;padding:8px 10px;font-size:13px;color:#fff;background:#374151;cursor:pointer}
+input.room{width:100%;margin-bottom:6px;padding:9px;font-size:15px}
+.scl{display:flex;align-items:center;gap:6px;color:#94a3b8;font-size:13px;margin-bottom:8px}
+.scl input{width:64px}
 .tools{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
-.tools button{flex:1;min-width:68px;border:0;border-radius:8px;padding:9px;font-size:13px;color:#fff;background:#1f2937;cursor:pointer}
+.tools button{flex:1;min-width:58px;border:0;border-radius:8px;padding:9px;font-size:13px;color:#fff;background:#1f2937;cursor:pointer}
 .tools button.on{outline:2px solid #38bdf8}
 svg#cv{width:100%;background:#0e131c;border:1px solid #1f2937;border-radius:12px;touch-action:none}
 .act{display:flex;gap:6px;margin-top:8px}
 .act button{flex:1;border:0;border-radius:8px;padding:10px;font-size:13px;color:#fff;cursor:pointer}
-.leg{color:#64748b;font-size:12px;margin-top:8px;text-align:center;line-height:1.5}
+#resumo{color:#cbd5e1;font-size:12px;margin-top:8px;text-align:center;line-height:1.6}
+.leg{color:#64748b;font-size:11px;margin-top:6px;text-align:center}
 </style></head><body>
-<header><h1>Croqui / Anotacoes</h1><div class="sub">medidas de parede, pontos de luz, tomadas - offline</div></header>
+<header><h1>Croqui / Anotacoes</h1><div class="sub">multi-ambiente, cotas automaticas - offline</div></header>
 <div class="wrap"><a class="back" href="/">&lt; voltar</a>
-<input class="room" id="room" placeholder="Ambiente (ex: Sala, Quarto 1)" oninput="save()">
+<div class="r1"><select id="rooms" onchange="selRoom()"></select>
+<button class="mini" onclick="newRoom()">+ Amb</button>
+<button class="mini" onclick="delRoom()" style="background:#7f1d1d">Apagar</button></div>
+<input class="room" id="room" placeholder="Nome do ambiente" oninput="rename()">
+<div class="scl">Grade: <input id="scale" type="number" step="0.1" value="0.5" oninput="setScale()"> m por quadrado (cota automatica)</div>
 <div class="tools">
 <button data-t="parede" class="on" onclick="setT(this)">Parede</button>
 <button data-t="luz" onclick="setT(this)">Luz</button>
 <button data-t="tomada" onclick="setT(this)">Tomada</button>
-<button data-t="interr" onclick="setT(this)">Interrup</button>
+<button data-t="interr" onclick="setT(this)">Interr</button>
+<button data-t="porta" onclick="setT(this)">Porta</button>
+<button data-t="janela" onclick="setT(this)">Janela</button>
 <button data-t="texto" onclick="setT(this)">Texto</button>
 <button data-t="apagar" onclick="setT(this)">Apagar</button>
 </div>
@@ -258,37 +271,53 @@ svg#cv{width:100%;background:#0e131c;border:1px solid #1f2937;border-radius:12px
 <button onclick="clr()" style="background:#7f1d1d">Limpar</button>
 <button onclick="exp()" style="background:#0e7490">Exportar SVG</button>
 </div>
-<div class="leg">Luz = circulo amarelo (L) &middot; Tomada = azul (T) &middot; Interruptor = verde (I)<br>
-Parede: toque o inicio e o fim, depois digite a medida (m). Salva sozinho no navegador.</div>
+<div id="resumo"></div>
+<div class="leg">Parede: toque inicio e fim (cota pela escala). Luz(L) Tomada(T) Interr(I) Porta(P) Janela(J).</div>
 </div><script>
-const NS='http://www.w3.org/2000/svg',cv=document.getElementById('cv'),layer=document.getElementById('layer'),grid=document.getElementById('grid');
-let tool='parede',wallStart=null;
+const NS='http://www.w3.org/2000/svg',$=id=>document.getElementById(id),cv=$('cv'),layer=$('layer'),grid=$('grid');
+let rooms=[],cur=0,scale=0.5,tool='parede',wallStart=null;
 for(let x=0;x<=360;x+=30){let l=document.createElementNS(NS,'line');l.setAttribute('x1',x);l.setAttribute('y1',0);l.setAttribute('x2',x);l.setAttribute('y2',300);l.setAttribute('stroke','#161c27');grid.appendChild(l);}
 for(let y=0;y<=300;y+=30){let l=document.createElementNS(NS,'line');l.setAttribute('x1',0);l.setAttribute('y1',y);l.setAttribute('x2',360);l.setAttribute('y2',y);l.setAttribute('stroke','#161c27');grid.appendChild(l);}
-function setT(b){tool=b.dataset.t;document.querySelectorAll('.tools button').forEach(x=>x.classList.remove('on'));b.classList.add('on');wallStart=null;rmtmp();}
-function pt(e){let r=cv.getBoundingClientRect(),c=e.touches?e.touches[0]:e;return[Math.round((c.clientX-r.left)/r.width*360),Math.round((c.clientY-r.top)/r.height*300)];}
+const snap=v=>Math.round(v/30)*30;
 function el(tag,at,parent){let o=document.createElementNS(NS,tag);for(let k in at)o.setAttribute(k,at[k]);(parent||layer).appendChild(o);return o;}
-function rmtmp(){let t=document.getElementById('tmp');if(t)t.remove();}
-function hook(g){g.addEventListener('click',ev=>{if(tool=='apagar'){ev.stopPropagation();g.remove();save();}});}
-function symbol(x,y,col,ch){let g=el('g',{'data-it':'1'});hook(g);
+function rmtmp(){let t=$('tmp');if(t)t.remove();}
+function hook(g){g.addEventListener('click',ev=>{if(tool=='apagar'){ev.stopPropagation();g.remove();chg();}});}
+function setT(b){tool=b.dataset.t;document.querySelectorAll('.tools button').forEach(x=>x.classList.remove('on'));b.classList.add('on');wallStart=null;rmtmp();}
+function pt(e){let r=cv.getBoundingClientRect(),c=e.touches?e.touches[0]:e;return[snap((c.clientX-r.left)/r.width*360),snap((c.clientY-r.top)/r.height*300)];}
+function symbol(x,y,col,ch,type){let g=el('g',{'data-it':'1','data-type':type});hook(g);
 el('circle',{cx:x,cy:y,r:9,fill:col,stroke:'#0b0f17','stroke-width':1.5},g);
-el('text',{x:x,y:y+4,'text-anchor':'middle','font-size':11,fill:'#0b0f17','font-weight':'bold'},g).textContent=ch;}
+el('text',{x:x,y:y+4,'text-anchor':'middle','font-size':11,fill:'#0b0f17','font-weight':'bold'},g).textContent=ch;chg();}
 cv.addEventListener('click',e=>{let p=pt(e),x=p[0],y=p[1];if(tool=='apagar')return;
-if(tool=='luz'){symbol(x,y,'#facc15','L');save();return;}
-if(tool=='tomada'){symbol(x,y,'#38bdf8','T');save();return;}
-if(tool=='interr'){symbol(x,y,'#22c55e','I');save();return;}
-if(tool=='texto'){let t=prompt('Texto:');if(t){let g=el('g',{'data-it':'1'});hook(g);el('text',{x:x,y:y,'font-size':12,fill:'#e5e7eb'},g).textContent=t;save();}return;}
+if(tool=='luz')   {symbol(x,y,'#facc15','L','luz');return;}
+if(tool=='tomada'){symbol(x,y,'#38bdf8','T','tomada');return;}
+if(tool=='interr'){symbol(x,y,'#22c55e','I','interr');return;}
+if(tool=='porta') {symbol(x,y,'#f97316','P','porta');return;}
+if(tool=='janela'){symbol(x,y,'#06b6d4','J','janela');return;}
+if(tool=='texto'){let t=prompt('Texto:');if(t){let g=el('g',{'data-it':'1','data-type':'texto'});hook(g);el('text',{x:x,y:y,'font-size':12,fill:'#e5e7eb'},g).textContent=t;chg();}return;}
 if(tool=='parede'){if(!wallStart){wallStart=[x,y];rmtmp();el('circle',{cx:x,cy:y,r:3,fill:'#38bdf8',id:'tmp'},grid);}
-else{let sx=wallStart[0],sy=wallStart[1];wallStart=null;rmtmp();let m=prompt('Medida da parede (m):','');
-let g=el('g',{'data-it':'1'});hook(g);el('line',{x1:sx,y1:sy,x2:x,y2:y,stroke:'#e5e7eb','stroke-width':2.5},g);
-if(m)el('text',{x:(sx+x)/2,y:(sy+y)/2-4,'text-anchor':'middle','font-size':11,fill:'#38bdf8'},g).textContent=m+' m';save();}return;}});
-function undo(){let k=layer.querySelectorAll('[data-it]');if(k.length){k[k.length-1].remove();save();}}
-function clr(){if(confirm('Limpar o croqui?')){layer.innerHTML='';save();}}
-function save(){localStorage.setItem('croqui',JSON.stringify({room:document.getElementById('room').value,svg:layer.innerHTML}));}
-function load(){try{let d=JSON.parse(localStorage.getItem('croqui')||'{}');if(d.room)document.getElementById('room').value=d.room;if(d.svg){layer.innerHTML=d.svg;layer.querySelectorAll('[data-it]').forEach(hook);}}catch(e){}}
+else{let sx=wallStart[0],sy=wallStart[1];wallStart=null;rmtmp();if(sx==x&&sy==y)return;
+let len=Math.hypot(x-sx,y-sy)/30*scale;
+let g=el('g',{'data-it':'1','data-type':'parede','data-len':len.toFixed(2)});hook(g);
+el('line',{x1:sx,y1:sy,x2:x,y2:y,stroke:'#e5e7eb','stroke-width':2.5},g);
+el('text',{x:(sx+x)/2,y:(sy+y)/2-4,'text-anchor':'middle','font-size':11,fill:'#38bdf8'},g).textContent=len.toFixed(2)+' m';chg();}return;}});
+function undo(){let k=layer.querySelectorAll('[data-it]');if(k.length){k[k.length-1].remove();chg();}}
+function clr(){if(confirm('Limpar este ambiente?')){layer.innerHTML='';chg();}}
+function resumo(){let c={parede:0,luz:0,tomada:0,interr:0,porta:0,janela:0},tot=0;
+layer.querySelectorAll('[data-type]').forEach(g=>{let t=g.dataset.type;if(c[t]!==undefined)c[t]++;if(t=='parede')tot+=parseFloat(g.dataset.len||0);});
+$('resumo').innerHTML=`Paredes <b>${c.parede}</b> (perimetro <b>${tot.toFixed(2)} m</b>)<br>Luz <b>${c.luz}</b> &middot; Tomada <b>${c.tomada}</b> &middot; Interr <b>${c.interr}</b> &middot; Porta <b>${c.porta}</b> &middot; Janela <b>${c.janela}</b>`;}
+function chg(){rooms[cur].svg=layer.innerHTML;rooms[cur].name=$('room').value;localStorage.setItem('croquis',JSON.stringify(rooms));resumo();}
+function loadRoom(){layer.innerHTML=rooms[cur].svg||'';layer.querySelectorAll('[data-it]').forEach(hook);$('room').value=rooms[cur].name||'';resumo();}
+function fillSel(){$('rooms').innerHTML=rooms.map((r,i)=>'<option value="'+i+'">'+(r.name||('Ambiente '+(i+1)))+'</option>').join('');$('rooms').value=cur;}
+function selRoom(){rooms[cur].svg=layer.innerHTML;cur=+$('rooms').value;loadRoom();}
+function newRoom(){rooms[cur].svg=layer.innerHTML;rooms.push({name:'Ambiente '+(rooms.length+1),svg:''});cur=rooms.length-1;fillSel();loadRoom();chg();}
+function delRoom(){if(rooms.length<=1){clr();return;}if(!confirm('Apagar o ambiente todo?'))return;rooms.splice(cur,1);if(cur>=rooms.length)cur=rooms.length-1;fillSel();loadRoom();localStorage.setItem('croquis',JSON.stringify(rooms));}
+function rename(){rooms[cur].name=$('room').value;if($('rooms').options[cur])$('rooms').options[cur].text=$('room').value||('Ambiente '+(cur+1));localStorage.setItem('croquis',JSON.stringify(rooms));}
+function setScale(){scale=parseFloat($('scale').value)||0.5;localStorage.setItem('croqui_scale',scale);}
 function exp(){let s='<svg xmlns="'+NS+'" viewBox="0 0 360 300"><rect width="360" height="300" fill="#0e131c"/>'+grid.outerHTML+layer.outerHTML+'</svg>';
-let b=new Blob([s],{type:'image/svg+xml'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=(document.getElementById('room').value||'croqui')+'.svg';a.click();URL.revokeObjectURL(u);}
-load();
+let b=new Blob([s],{type:'image/svg+xml'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=(($('room').value||'croqui').replace(/[^a-z0-9]/gi,'_'))+'.svg';a.click();URL.revokeObjectURL(u);}
+(function(){try{rooms=JSON.parse(localStorage.getItem('croquis')||'[]');}catch(e){rooms=[];}
+scale=parseFloat(localStorage.getItem('croqui_scale')||'0.5');$('scale').value=scale;
+if(!rooms.length)rooms=[{name:'Ambiente 1',svg:''}];cur=0;fillSel();loadRoom();})();
 </script></body></html>)CRO";
 
 // ---- handlers -------------------------------------------------------------
