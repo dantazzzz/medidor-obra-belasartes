@@ -26,3 +26,4 @@ bool LevelApp_SignXPos();
 bool LevelApp_SignYPos();
 void LevelApp_SetBeep(bool on);
 bool LevelApp_GetBeep();
+void LevelApp_Calibrate();   // captura a leitura atual como zero (superficie plana)

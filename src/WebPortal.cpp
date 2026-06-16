@@ -38,7 +38,8 @@ th{color:#94a3b8;font-weight:600}.empty{color:#64748b;text-align:center;padding:
 <header><h1>Medidor de Obra</h1><div class="sub">Belas Artes - FEBASP</div></header>
 <div class="wrap">
 <a class="btn b1" href="/sol" style="display:block;margin-bottom:8px;text-decoration:none;background:#b45309">Sol / Insolacao (carta solar offline)</a>
-<a class="btn b1" href="/calc" style="display:block;margin-bottom:12px;text-decoration:none;background:#0e7490">Calculadora de Obra</a>
+<a class="btn b1" href="/calc" style="display:block;margin-bottom:8px;text-decoration:none;background:#0e7490">Calculadora de Obra</a>
+<a class="btn b1" href="/croqui" style="display:block;margin-bottom:12px;text-decoration:none;background:#7c3aed">Croqui / Anotacoes (medidas, luz, tomada)</a>
 <div class="card"><div class="mode" id="mode">--</div>
 <div class="live"><span class="big" id="val">--</span><span class="unit" id="unit"></span></div></div>
 <div class="card"><div class="row">
@@ -101,6 +102,7 @@ a.back{color:#38bdf8;font-size:13px;text-decoration:none}
 <div class="sub" id="msg" style="margin-top:8px"></div></div>
 <div class="card" id="out"></div>
 <div class="card"><div class="sub">Carta solar (azimute x altura do sol)</div><div id="chart"></div></div>
+<div class="card"><div class="sub">Horas de sol na fachada por mes (mascara de sombreamento)</div><div id="mask"></div></div>
 </div><script>
 const R=Math.PI/180,D=180/Math.PI,$=id=>document.getElementById(id);
 function doy(d){return Math.floor((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Date.UTC(d.getFullYear(),0,0))/864e5);}
@@ -123,6 +125,16 @@ s+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y0}" stroke="#334155"/>`;
 const fx=X(((fac%360)+360)%360);s+=`<line x1="${fx}" y1="${y1}" x2="${fx}" y2="${y0}" stroke="#f59e0b" stroke-dasharray="3 3"/>`;
 if(pts.length){let d=pts.map((p,i)=>(i?'L':'M')+X(p.az).toFixed(1)+' '+Y(p.el).toFixed(1)).join(' ');
 s+=`<path d="${d}" fill="none" stroke="#38bdf8" stroke-width="2.5"/>`;}return s+'</svg>';}
+function maskBars(lat,lon,tz,fac){const cum=[0,31,59,90,120,151,181,212,243,273,304,334],mn=['J','F','M','A','M','J','J','A','S','O','N','D'];
+let hrs=[];for(let m=0;m<12;m++){let N=cum[m]+15,T=times(lat,lon,tz,N),h=0;
+if(!T.none){for(let t=T.rise;t<=T.set;t+=2/60){let p=pos(lat,lon,tz,N,t);if(p.el>0&&Math.cos((p.az-fac)*R)>0)h+=2/60;}}hrs.push(h);}
+let mx=Math.max(...hrs,1),W=340,H=130,x0=14,y0=H-22,y1=8,step=(W-2*x0)/12,bw=step-5;
+let s=`<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+hrs.forEach((h,i)=>{let x=x0+i*step,bh=(h/mx)*(y0-y1);
+s+=`<rect x="${x.toFixed(1)}" y="${(y0-bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="#38bdf8"/>`;
+s+=`<text x="${(x+bw/2).toFixed(1)}" y="${(y0-bh-3).toFixed(1)}" fill="#94a3b8" font-size="8" text-anchor="middle">${h.toFixed(0)}</text>`;
+s+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-6}" fill="#64748b" font-size="9" text-anchor="middle">${mn[i]}</text>`;});
+return s+'</svg>';}
 function calc(){const lat=+$('lat').value,lon=+$('lon').value,tz=+$('tz').value,fac=+$('fac').value,hh=+$('h').value;
 const d=new Date($('dt').value+'T12:00');if(isNaN(d)){$('msg').textContent='data invalida';return;}const N=doy(d),T=times(lat,lon,tz,N);
 if(T.none){$('out').innerHTML='<b>'+T.none+'</b>';$('chart').innerHTML='';return;}
@@ -139,8 +151,11 @@ $('out').innerHTML=`<div class="kv"><span>Nascer do sol</span><b>${fmt(T.rise)}<
 <div class="kv"><span>Janela de sol na fachada</span><b>${win.length?fmt(win[0])+' - '+fmt(win[win.length-1]):'nunca'}</b></div>
 <div class="kv"><span>Sombra ao meio-dia (h=${hh}m)</span><b>${sh!=null?sh.toFixed(2)+' m':'--'}</b></div><hr>
 <div class="kv"><span>Beiral p/ sombrear (por m de janela)</span><b>${eln>5?(1/Math.tan(eln*R)).toFixed(2)+' m':'--'}</b></div>
-<div class="kv"><span>Painel solar: inclinacao otima</span><b>~${Math.abs(lat).toFixed(0)}&#176; p/ ${lat<0?'Norte':'Sul'}</b></div>`;
-$('chart').innerHTML=chart(pts,fac);}
+<div class="kv"><span>Painel solar: inclinacao otima</span><b>~${Math.abs(lat).toFixed(0)}&#176; p/ ${lat<0?'Norte':'Sul'}</b></div><hr>
+<div class="kv"><span>Melhor face (sol o dia todo)</span><b>${lat<0?'Norte':'Sul'}</b></div>
+<div class="kv"><span>Sol da manha / da tarde</span><b>Leste / Oeste</b></div>
+<div class="kv"><span>Face mais fresca (deposito)</span><b>${lat<0?'Sul':'Norte'}</b></div>`;
+$('chart').innerHTML=chart(pts,fac);$('mask').innerHTML=maskBars(lat,lon,tz,fac);}
 function geo(){if(!navigator.geolocation){$('msg').textContent='navegador sem GPS';return;}
 $('msg').textContent='pedindo GPS...';navigator.geolocation.getCurrentPosition(
 p=>{$('lat').value=p.coords.latitude.toFixed(4);$('lon').value=p.coords.longitude.toFixed(4);$('msg').textContent='GPS ok';calc();},
@@ -208,10 +223,79 @@ $('aR').innerHTML=`cimento ~<b>${(cim*1000).toFixed(0)} L</b> (~${Math.ceil(cim/
 cc();tc();ec();pc();ac();
 </script></body></html>)CALC";
 
+// ---- pagina CROQUI / ANOTACOES (anotacao do arquiteto) --------------------
+static const char PAGE_CROQUI[] PROGMEM = R"CRO(<!doctype html><html lang="pt-br"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Croqui / Anotacoes</title><style>
+*{box-sizing:border-box}body{margin:0;background:#0b0f17;color:#e5e7eb;font-family:system-ui,Segoe UI,Roboto,Arial}
+header{padding:12px;text-align:center;background:#111827;border-bottom:1px solid #1f2937}
+h1{margin:0;font-size:17px}.sub{color:#94a3b8;font-size:12px;margin-top:3px}
+.wrap{padding:12px;max-width:680px;margin:0 auto}
+a.back{color:#38bdf8;font-size:13px;text-decoration:none;display:inline-block;margin-bottom:8px}
+input.room{width:100%;background:#0b0f17;border:1px solid #334155;color:#e5e7eb;border-radius:8px;padding:9px;font-size:15px;margin-bottom:8px}
+.tools{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.tools button{flex:1;min-width:68px;border:0;border-radius:8px;padding:9px;font-size:13px;color:#fff;background:#1f2937;cursor:pointer}
+.tools button.on{outline:2px solid #38bdf8}
+svg#cv{width:100%;background:#0e131c;border:1px solid #1f2937;border-radius:12px;touch-action:none}
+.act{display:flex;gap:6px;margin-top:8px}
+.act button{flex:1;border:0;border-radius:8px;padding:10px;font-size:13px;color:#fff;cursor:pointer}
+.leg{color:#64748b;font-size:12px;margin-top:8px;text-align:center;line-height:1.5}
+</style></head><body>
+<header><h1>Croqui / Anotacoes</h1><div class="sub">medidas de parede, pontos de luz, tomadas - offline</div></header>
+<div class="wrap"><a class="back" href="/">&lt; voltar</a>
+<input class="room" id="room" placeholder="Ambiente (ex: Sala, Quarto 1)" oninput="save()">
+<div class="tools">
+<button data-t="parede" class="on" onclick="setT(this)">Parede</button>
+<button data-t="luz" onclick="setT(this)">Luz</button>
+<button data-t="tomada" onclick="setT(this)">Tomada</button>
+<button data-t="interr" onclick="setT(this)">Interrup</button>
+<button data-t="texto" onclick="setT(this)">Texto</button>
+<button data-t="apagar" onclick="setT(this)">Apagar</button>
+</div>
+<svg id="cv" viewBox="0 0 360 300"><g id="grid"></g><g id="layer"></g></svg>
+<div class="act">
+<button onclick="undo()" style="background:#374151">Desfazer</button>
+<button onclick="clr()" style="background:#7f1d1d">Limpar</button>
+<button onclick="exp()" style="background:#0e7490">Exportar SVG</button>
+</div>
+<div class="leg">Luz = circulo amarelo (L) &middot; Tomada = azul (T) &middot; Interruptor = verde (I)<br>
+Parede: toque o inicio e o fim, depois digite a medida (m). Salva sozinho no navegador.</div>
+</div><script>
+const NS='http://www.w3.org/2000/svg',cv=document.getElementById('cv'),layer=document.getElementById('layer'),grid=document.getElementById('grid');
+let tool='parede',wallStart=null;
+for(let x=0;x<=360;x+=30){let l=document.createElementNS(NS,'line');l.setAttribute('x1',x);l.setAttribute('y1',0);l.setAttribute('x2',x);l.setAttribute('y2',300);l.setAttribute('stroke','#161c27');grid.appendChild(l);}
+for(let y=0;y<=300;y+=30){let l=document.createElementNS(NS,'line');l.setAttribute('x1',0);l.setAttribute('y1',y);l.setAttribute('x2',360);l.setAttribute('y2',y);l.setAttribute('stroke','#161c27');grid.appendChild(l);}
+function setT(b){tool=b.dataset.t;document.querySelectorAll('.tools button').forEach(x=>x.classList.remove('on'));b.classList.add('on');wallStart=null;rmtmp();}
+function pt(e){let r=cv.getBoundingClientRect(),c=e.touches?e.touches[0]:e;return[Math.round((c.clientX-r.left)/r.width*360),Math.round((c.clientY-r.top)/r.height*300)];}
+function el(tag,at,parent){let o=document.createElementNS(NS,tag);for(let k in at)o.setAttribute(k,at[k]);(parent||layer).appendChild(o);return o;}
+function rmtmp(){let t=document.getElementById('tmp');if(t)t.remove();}
+function hook(g){g.addEventListener('click',ev=>{if(tool=='apagar'){ev.stopPropagation();g.remove();save();}});}
+function symbol(x,y,col,ch){let g=el('g',{'data-it':'1'});hook(g);
+el('circle',{cx:x,cy:y,r:9,fill:col,stroke:'#0b0f17','stroke-width':1.5},g);
+el('text',{x:x,y:y+4,'text-anchor':'middle','font-size':11,fill:'#0b0f17','font-weight':'bold'},g).textContent=ch;}
+cv.addEventListener('click',e=>{let p=pt(e),x=p[0],y=p[1];if(tool=='apagar')return;
+if(tool=='luz'){symbol(x,y,'#facc15','L');save();return;}
+if(tool=='tomada'){symbol(x,y,'#38bdf8','T');save();return;}
+if(tool=='interr'){symbol(x,y,'#22c55e','I');save();return;}
+if(tool=='texto'){let t=prompt('Texto:');if(t){let g=el('g',{'data-it':'1'});hook(g);el('text',{x:x,y:y,'font-size':12,fill:'#e5e7eb'},g).textContent=t;save();}return;}
+if(tool=='parede'){if(!wallStart){wallStart=[x,y];rmtmp();el('circle',{cx:x,cy:y,r:3,fill:'#38bdf8',id:'tmp'},grid);}
+else{let sx=wallStart[0],sy=wallStart[1];wallStart=null;rmtmp();let m=prompt('Medida da parede (m):','');
+let g=el('g',{'data-it':'1'});hook(g);el('line',{x1:sx,y1:sy,x2:x,y2:y,stroke:'#e5e7eb','stroke-width':2.5},g);
+if(m)el('text',{x:(sx+x)/2,y:(sy+y)/2-4,'text-anchor':'middle','font-size':11,fill:'#38bdf8'},g).textContent=m+' m';save();}return;}});
+function undo(){let k=layer.querySelectorAll('[data-it]');if(k.length){k[k.length-1].remove();save();}}
+function clr(){if(confirm('Limpar o croqui?')){layer.innerHTML='';save();}}
+function save(){localStorage.setItem('croqui',JSON.stringify({room:document.getElementById('room').value,svg:layer.innerHTML}));}
+function load(){try{let d=JSON.parse(localStorage.getItem('croqui')||'{}');if(d.room)document.getElementById('room').value=d.room;if(d.svg){layer.innerHTML=d.svg;layer.querySelectorAll('[data-it]').forEach(hook);}}catch(e){}}
+function exp(){let s='<svg xmlns="'+NS+'" viewBox="0 0 360 300"><rect width="360" height="300" fill="#0e131c"/>'+grid.outerHTML+layer.outerHTML+'</svg>';
+let b=new Blob([s],{type:'image/svg+xml'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=(document.getElementById('room').value||'croqui')+'.svg';a.click();URL.revokeObjectURL(u);}
+load();
+</script></body></html>)CRO";
+
 // ---- handlers -------------------------------------------------------------
-static void handleRoot() { server.send_P(200, "text/html", PAGE); }
-static void handleSol()  { server.send_P(200, "text/html", PAGE_SOL); }
-static void handleCalc() { server.send_P(200, "text/html", PAGE_CALC); }
+static void handleRoot()   { server.send_P(200, "text/html", PAGE); }
+static void handleSol()    { server.send_P(200, "text/html", PAGE_SOL); }
+static void handleCalc()   { server.send_P(200, "text/html", PAGE_CALC); }
+static void handleCroqui() { server.send_P(200, "text/html", PAGE_CROQUI); }
 
 static void handleLive() {
     char buf[96];
@@ -277,6 +361,7 @@ void WebPortal_Init() {
     server.on("/", handleRoot);
     server.on("/sol", handleSol);
     server.on("/calc", handleCalc);
+    server.on("/croqui", handleCroqui);
     server.on("/live", handleLive);
     server.on("/data", handleData);
     server.on("/data.csv", handleCsv);

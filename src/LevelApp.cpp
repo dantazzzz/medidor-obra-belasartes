@@ -44,13 +44,15 @@ static float curR = 0, curP = 0;
 static float heldR = 0, heldP = 0;
 static float dbMin = 999, dbMax = 0;
 static float planMin = 999, planMax = 0; // PLANEZA: faixa de desvio
+static float perfMin = 999, perfMax = -999; // PERFIL: faixa de caimento %
+static float gCalR = 0, gCalP = 0;       // calibracao (offset persistente do nivel)
 static float g_lastBig = 0;             // ultimo valor exibido (p/ CAPTURAR)
 static char  g_lastUnit[6] = "GRAUS";
 static int   g_saved = 0;               // contador p/ mostrar "SALVO"
 
-static const char *MODE_NAMES[8] =
+static const char *MODE_NAMES[9] =
     {"NIVEL", "PRUMO", "DECLIVIDADE", "TRANSFERIDOR", "RUIDO",
-     "CONVERSOR", "ESQUADRO", "PLANEZA"};
+     "CONVERSOR", "ESQUADRO", "PLANEZA", "PERFIL"};
 
 // Presets de norma p/ DECLIVIDADE (% ; valor < 0 = sem limite). Guia, confira a norma.
 struct Norm { const char *name; float mn; float mx; };
@@ -78,8 +80,9 @@ static void onZero(lv_event_t *e) {
     (void)e;
     if (g_mode == 4) { dbMin = 999; dbMax = 0; }
     else {
-        roll0 = fRoll; pitch0 = fPitch;
-        if (g_mode == 7) { planMin = 999; planMax = 0; }   // PLANEZA: reinicia a faixa
+        roll0 = fRoll - gCalR; pitch0 = fPitch - gCalP;
+        if (g_mode == 7) { planMin = 999; planMax = 0; }      // PLANEZA: reinicia a faixa
+        if (g_mode == 8) { perfMin = 999; perfMax = -999; }   // PERFIL: reinicia a faixa
     }
     g_hold = false;
 }
@@ -221,6 +224,13 @@ void LevelApp_SetMode(int mode) {
     g_hold = false;
     if (mode == 4) { dbMin = 999; dbMax = 0; }
     if (mode == 7) { planMin = 999; planMax = 0; }
+    if (mode == 8) { perfMin = 999; perfMax = -999; }
+}
+
+// captura a leitura atual como o "zero verdadeiro" (apoie numa superficie plana)
+void LevelApp_Calibrate() {
+    gCalR = fRoll; gCalP = fPitch;
+    roll0 = 0; pitch0 = 0;
 }
 
 const char *LevelApp_ModeName() { return MODE_NAMES[g_mode]; }
@@ -244,8 +254,8 @@ void LevelApp_Update(float ax, float ay, float az) {
     fRoll  += SMOOTH * (roll  - fRoll);
     fPitch += SMOOTH * (pitch - fPitch);
 
-    float r = fRoll  - roll0;
-    float p = fPitch - pitch0;
+    float r = (fRoll  - gCalR) - roll0;
+    float p = (fPitch - gCalP) - pitch0;
     curR = r; curP = p;
     if (g_hold) { r = heldR; p = heldP; }
 
@@ -267,6 +277,9 @@ void LevelApp_Update(float ax, float ay, float az) {
         case 7: bx = r; by = p; big = sqrtf(r * r + p * p);          // PLANEZA
                 if (big < planMin) planMin = big;
                 if (big > planMax) planMax = big; break;
+        case 8: bx = 0; by = p; big = tanf(p / DEG) * 100.0f; unit = "%";  // PERFIL caimento
+                if (big < perfMin) perfMin = big;
+                if (big > perfMax) perfMax = big; break;
     }
     g_lastBig = big;
     strncpy(g_lastUnit, unit, sizeof(g_lastUnit) - 1); g_lastUnit[sizeof(g_lastUnit) - 1] = 0;
@@ -383,6 +396,17 @@ void LevelApp_Update(float ax, float ay, float az) {
         snprintf(s, sizeof(s), "desvio: %.1f graus", (double)(planMax - planMin));
         lv_label_set_text(lblStatus, s);
         snprintf(s, sizeof(s), "min %.1f   max %.1f", (double)planMin, (double)planMax);
+        lv_label_set_text(lblHint, showSaved ? "SALVO" : s);
+    }
+    else if (g_mode == 8) {                                  // PERFIL de caimento (%)
+        lv_obj_set_style_text_color(lblBig, lv_color_hex(0xffffff), 0);
+        lv_obj_set_style_text_color(lblStatus, lv_color_hex(0x0891b2), 0);
+        char s[44];
+        float md = (perfMax > -998) ? (perfMin + perfMax) / 2.0f : big;
+        snprintf(s, sizeof(s), "media ~%.1f%%", (double)md);
+        lv_label_set_text(lblStatus, s);
+        snprintf(s, sizeof(s), "min %.1f%%   max %.1f%%",
+                 (double)(perfMin > 998 ? big : perfMin), (double)(perfMax < -998 ? big : perfMax));
         lv_label_set_text(lblHint, showSaved ? "SALVO" : s);
     }
     else {

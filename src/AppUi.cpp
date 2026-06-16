@@ -18,17 +18,17 @@ static uint32_t splashStart = 0;
 
 static lv_obj_t *splashCont, *menuCont, *toolCont, *dataCont, *sunCont, *setCont;
 
-#define NCARDS 11
-// Cartoes do menu (8 ferramentas + SOL + DADOS + AJUSTES)
+#define NCARDS 12
+// Cartoes do menu (9 ferramentas + SOL + DADOS + AJUSTES)
 static const char *CARD_NAME[NCARDS] =
     {"NIVEL", "PRUMO", "DECLIVIDADE", "TRANSFERIDOR", "RUIDO",
-     "CONVERSOR", "ESQUADRO", "PLANEZA", "SOL", "DADOS", "AJUSTES"};
+     "CONVERSOR", "ESQUADRO", "PLANEZA", "PERFIL", "SOL", "DADOS", "AJUSTES"};
 static const char *CARD_SUB[NCARDS] =
     {"bolha 2D", "verticalidade", "caimento %", "angulo", "decibelimetro",
-     "graus/%/mm-m", "quina 90", "planeza/empeno", "carta solar", "WiFi + celular", "calibrar/brilho"};
+     "graus/%/mm-m", "quina 90", "planeza/empeno", "caimento perfil", "carta solar", "WiFi + celular", "calibrar/brilho"};
 static const uint32_t CARD_COL[NCARDS] =
     {0x2563eb, 0x7c3aed, 0x0891b2, 0xca8a04, 0xdc2626,
-     0x0d9488, 0x65a30d, 0x9333ea, 0xb45309, 0x0f766e, 0x64748b};
+     0x0d9488, 0x65a30d, 0x9333ea, 0x0e7490, 0xb45309, 0x0f766e, 0x64748b};
 static lv_obj_t *dotObjs[NCARDS];   // indicador de paginas do menu
 
 static void vis(lv_obj_t *o, bool on) {
@@ -49,10 +49,10 @@ static void show(int state) {
 static void onCard(lv_event_t *e) {
     lv_obj_t *card = lv_event_get_target(e);
     int idx = (int)(intptr_t)lv_obj_get_user_data(card);
-    if      (idx == 8)  AppUi_ShowSun();
-    else if (idx == 9)  AppUi_ShowData();
-    else if (idx == 10) AppUi_ShowSettings();
-    else                AppUi_OpenTool(idx);     // 0..7 abrem ferramentas
+    if      (idx == 9)  AppUi_ShowSun();
+    else if (idx == 10) AppUi_ShowData();
+    else if (idx == 11) AppUi_ShowSettings();
+    else                AppUi_OpenTool(idx);     // 0..8 abrem ferramentas
 }
 
 // destaca o pontinho do cartao que esta centralizado (segue o swipe)
@@ -261,6 +261,7 @@ static void onRefP (lv_event_t *e){ (void)e; MicDB_SetRef(MicDB_GetRef() + 1); s
 static void onFlipX(lv_event_t *e){ (void)e; LevelApp_FlipX(); setRefresh(); }
 static void onFlipY(lv_event_t *e){ (void)e; LevelApp_FlipY(); setRefresh(); }
 static void onBeepT(lv_event_t *e){ (void)e; LevelApp_SetBeep(!LevelApp_GetBeep()); setRefresh(); }
+static void onCalib(lv_event_t *e){ (void)e; LevelApp_Calibrate(); }   // zera com a placa plana
 static void onSetBack(lv_event_t *e){ (void)e; AppUi_ShowMenu(); }
 
 static lv_obj_t *sBtn(lv_obj_t *p, const char *txt, int x, int y, int w, lv_event_cb_t cb, uint32_t col) {
@@ -305,9 +306,10 @@ static void buildSettings(lv_obj_t *scr) {
     sBtn(setCont, "-", -120, 126, 44, onRefM, 0x374151);
     sBtn(setCont, "+",  120, 126, 44, onRefP, 0x374151);
 
-    s_lblFlip = sLabel(setCont, 184);                          // Inverter bolha
-    sBtn(setCont, "inv X", -68, 200, 72, onFlipX, 0x2563eb);
-    sBtn(setCont, "inv Y",  68, 200, 72, onFlipY, 0x2563eb);
+    s_lblFlip = sLabel(setCont, 184);                          // Inverter bolha + calibrar
+    sBtn(setCont, "inv X", -90, 200, 58, onFlipX, 0x2563eb);
+    sBtn(setCont, "inv Y",   0, 200, 58, onFlipY, 0x2563eb);
+    sBtn(setCont, "CAL",    90, 200, 58, onCalib, 0x16a34a);   // calibrar (apoie plano)
 
     s_lblBeep = sLabel(setCont, 250);                          // Bip
     sBtn(setCont, "trocar", 0, 266, 96, onBeepT, 0x16a34a);
