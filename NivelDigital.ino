@@ -20,6 +20,8 @@
 #include "src/AppUi.h"
 #include "src/SunApp.h"
 #include "src/Mic_dB.h"
+#include "src/Beep.h"
+#include "src/SD_Card.h"
 #include "src/WebPortal.h"
 
 // Task de segundo plano (core 0): so atualiza sensores. NAO toca na LVGL
@@ -47,6 +49,7 @@ void setup() {
     Set_Backlight(60);            // 0..100
     PCF85063_Init();              // RTC
     QMI8658_Init();               // IMU
+    SD_Init();                     // cartao SD (D3 habilitado pelo expansor)
 
     // Tela + LVGL
     LCD_Init();
@@ -55,8 +58,9 @@ void setup() {
     // UI: splash -> menu -> ferramentas
     AppUi_Init();
 
-    // Decibelimetro (mic I2S) - sobe a propria task no core 0
+    // Decibelimetro (mic I2S) + bip de audio (I2S de saida) - tasks no core 0
     MicDB_Init();
+    Beep_Init();
 
     // Portal WiFi (AP + pagina pra ver/baixar as medicoes no celular)
     WebPortal_Init();

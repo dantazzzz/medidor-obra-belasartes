@@ -13,6 +13,7 @@
 #include "LevelApp.h"
 #include "Mic_dB.h"
 #include "DataLog.h"
+#include "Beep.h"
 
 extern void AppUi_ShowMenu();      // volta para o menu (definido em AppUi.cpp)
 
@@ -21,8 +22,11 @@ extern void AppUi_ShowMenu();      // volta para o menu (definido em AppUi.cpp)
 #define BUB_LIM   120.0f           // limite de deslocamento da bolha (px)
 #define LEVEL_TOL 0.4f             // tolerancia de "nivelado" (graus)
 #define SMOOTH    0.12f            // filtro (menor = mais suave/estavel)
-#define SIGN_X    (+1.0f)
-#define SIGN_Y    (-1.0f)
+
+// Ajustaveis em tempo real (tela de Ajustes)
+static float gSX   = +1.0f;        // sinal do eixo X da bolha (inverte se for pro lado errado)
+static float gSY   = -1.0f;        // sinal do eixo Y
+static bool  gBeep = true;         // assistente sonoro de nivelamento
 
 // --- Objetos da UI ----------------------------------------------------------
 static lv_obj_t *root;
@@ -209,6 +213,13 @@ const char *LevelApp_ModeName() { return MODE_NAMES[g_mode]; }
 float       LevelApp_Value()    { return g_lastBig; }
 const char *LevelApp_Unit()     { return g_lastUnit; }
 
+void LevelApp_FlipX()    { gSX = -gSX; }
+void LevelApp_FlipY()    { gSY = -gSY; }
+bool LevelApp_SignXPos() { return gSX > 0; }
+bool LevelApp_SignYPos() { return gSY > 0; }
+void LevelApp_SetBeep(bool on) { gBeep = on; }
+bool LevelApp_GetBeep()  { return gBeep; }
+
 // ----------------------------------------------------------------------------
 //  Atualizacao (no loop, quando a ferramenta esta ativa)
 // ----------------------------------------------------------------------------
@@ -248,12 +259,25 @@ void LevelApp_Update(float ax, float ay, float az) {
     setHidden(lblNorm,   g_mode != 2);
 
     if (!noiseMode) {
-        float ox = SIGN_X * bx * PXDEG;
-        float oy = SIGN_Y * by * PXDEG;
+        float ox = gSX * bx * PXDEG;
+        float oy = gSY * by * PXDEG;
         if (ox >  BUB_LIM) ox =  BUB_LIM; if (ox < -BUB_LIM) ox = -BUB_LIM;
         if (oy >  BUB_LIM) oy =  BUB_LIM; if (oy < -BUB_LIM) oy = -BUB_LIM;
         lv_obj_align(bubble, LV_ALIGN_CENTER, (int)ox, (int)oy);
     }
+
+    // assistente sonoro: bips mais rapidos conforme aproxima do nivel (NIVEL/PRUMO)
+    static int beepCtr = 0;
+    if (gBeep && (g_mode == 0 || g_mode == 1)) {
+        float dev = fabsf(big);                 // desvio em graus
+        if (dev < 8.0f) {
+            int interval = 3 + (int)(dev * 6);  // frames (~15ms cada): perto = rapido
+            if (++beepCtr >= interval) {
+                beepCtr = 0;
+                Beep_Beep(dev < LEVEL_TOL ? 1760 : 880);   // agudo quando nivelado
+            }
+        } else beepCtr = 0;
+    } else beepCtr = 0;
     lv_obj_set_style_border_opa(ringTol,
         (g_mode == 0 || g_mode == 1) ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
 

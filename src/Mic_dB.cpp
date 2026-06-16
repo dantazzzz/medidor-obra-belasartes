@@ -17,10 +17,10 @@
 #define MIC_DOUT  -1
 #define MIC_DIN   39
 #define MIC_RATE  16000
-#define SPL_REF   120.0f   // 0 dBFS ~ 120 dB SPL (mic MEMS tipico). Ajuste fino aqui.
 
 static I2SClass     s_i2s;
-static volatile float s_db = 40.0f;
+static volatile float s_db  = 40.0f;
+static volatile float s_ref = 120.0f;   // 0 dBFS ~ s_ref dB SPL (calibravel nos Ajustes)
 
 static void MicTask(void *p) {
     (void)p;
@@ -39,7 +39,7 @@ static void MicTask(void *p) {
             }
             double rms = sqrt(acc / cnt);
             float  db  = (rms < 1.0) ? 0.0f
-                         : 20.0f * log10f((float)(rms / 32768.0)) + SPL_REF;
+                         : 20.0f * log10f((float)(rms / 32768.0)) + s_ref;
             if (db < 0) db = 0;
             s_db += 0.3f * (db - s_db);          // suaviza
         } else {
@@ -56,3 +56,5 @@ void MicDB_Init() {
 }
 
 float MicDB_Get() { return s_db; }
+void  MicDB_SetRef(float v) { if (v < 60) v = 60; if (v > 160) v = 160; s_ref = v; }
+float MicDB_GetRef()        { return s_ref; }

@@ -6,5 +6,6 @@ void AppUi_OpenTool(int mode);
 void AppUi_ShowMenu();
 void AppUi_ShowData();      // tela com instrucoes de WiFi
 void AppUi_ShowSun();       // ferramenta carta solar
+void AppUi_ShowSettings();  // tela de ajustes
 bool AppUi_ToolActive();    // true quando uma ferramenta de medicao esta aberta
 bool AppUi_SunActive();     // true quando a carta solar esta aberta

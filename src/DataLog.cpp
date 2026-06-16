@@ -1,6 +1,9 @@
-// Registro em RAM das medicoes capturadas (carimbadas com a hora do RTC).
+// Registro das medicoes: em RAM (pagina WiFi) e tambem no cartao SD (permanente).
 #include "DataLog.h"
 #include "RTC_PCF85063.h"
+#include "SD_Card.h"
+#include "FS.h"
+#include "SD_MMC.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -20,6 +23,19 @@ void DataLog_Add(const char *mode, float value, const char *unit) {
     } else {                                    // cheio: descarta o mais antigo
         memmove(s_log, s_log + 1, sizeof(LogEntry) * (DATALOG_MAX - 1));
         s_log[DATALOG_MAX - 1] = e;
+    }
+
+    // grava tambem no cartao SD (permanente), se houver cartao montado
+    if (SDCard_Size > 0) {
+        bool novo = !SD_MMC.exists("/medicoes.csv");
+        File f = SD_MMC.open("/medicoes.csv", FILE_APPEND);
+        if (f) {
+            if (novo) f.println("data,hora,funcao,valor,unidade");
+            f.printf("%04d-%02d-%02d,%s,%s,%.1f,%s\n",
+                     datetime.year, datetime.month, datetime.day,
+                     e.when, e.mode, e.value, e.unit);
+            f.close();
+        }
     }
 }
 

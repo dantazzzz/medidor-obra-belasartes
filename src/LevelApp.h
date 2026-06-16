@@ -18,3 +18,11 @@ void LevelApp_SetMode(int mode);
 const char *LevelApp_ModeName();
 float       LevelApp_Value();
 const char *LevelApp_Unit();
+
+// Ajustes (tela de configuracoes)
+void LevelApp_FlipX();
+void LevelApp_FlipY();
+bool LevelApp_SignXPos();
+bool LevelApp_SignYPos();
+void LevelApp_SetBeep(bool on);
+bool LevelApp_GetBeep();

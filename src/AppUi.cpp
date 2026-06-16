@@ -9,21 +9,23 @@
 #include "LevelApp.h"
 #include "WebPortal.h"
 #include "SunApp.h"
+#include "Mic_dB.h"
+#include "Display_SPD2010.h"
 
-enum { ST_SPLASH, ST_MENU, ST_TOOL, ST_DATA, ST_SUN };
+enum { ST_SPLASH, ST_MENU, ST_TOOL, ST_DATA, ST_SUN, ST_SET };
 static int      st = ST_SPLASH;
 static uint32_t splashStart = 0;
 
-static lv_obj_t *splashCont, *menuCont, *toolCont, *dataCont, *sunCont;
+static lv_obj_t *splashCont, *menuCont, *toolCont, *dataCont, *sunCont, *setCont;
 
-#define NCARDS 7
-// Cartoes do menu (5 ferramentas + SOL + DADOS/WiFi)
+#define NCARDS 8
+// Cartoes do menu (5 ferramentas + SOL + DADOS + AJUSTES)
 static const char *CARD_NAME[NCARDS] =
-    {"NIVEL", "PRUMO", "DECLIVIDADE", "TRANSFERIDOR", "RUIDO", "SOL", "DADOS"};
+    {"NIVEL", "PRUMO", "DECLIVIDADE", "TRANSFERIDOR", "RUIDO", "SOL", "DADOS", "AJUSTES"};
 static const char *CARD_SUB[NCARDS] =
-    {"bolha 2D", "verticalidade", "caimento %", "angulo", "decibelimetro", "carta solar", "WiFi + celular"};
+    {"bolha 2D", "verticalidade", "caimento %", "angulo", "decibelimetro", "carta solar", "WiFi + celular", "calibrar/brilho"};
 static const uint32_t CARD_COL[NCARDS] =
-    {0x2563eb, 0x7c3aed, 0x0891b2, 0xca8a04, 0xdc2626, 0xb45309, 0x0f766e};
+    {0x2563eb, 0x7c3aed, 0x0891b2, 0xca8a04, 0xdc2626, 0xb45309, 0x0f766e, 0x64748b};
 static lv_obj_t *dotObjs[NCARDS];   // indicador de paginas do menu
 
 static void vis(lv_obj_t *o, bool on) {
@@ -38,6 +40,7 @@ static void show(int state) {
     vis(toolCont,   state == ST_TOOL);
     vis(dataCont,   state == ST_DATA);
     vis(sunCont,    state == ST_SUN);
+    vis(setCont,    state == ST_SET);
 }
 
 static void onCard(lv_event_t *e) {
@@ -45,6 +48,7 @@ static void onCard(lv_event_t *e) {
     int idx = (int)(intptr_t)lv_obj_get_user_data(card);
     if      (idx == 5) AppUi_ShowSun();
     else if (idx == 6) AppUi_ShowData();
+    else if (idx == 7) AppUi_ShowSettings();
     else               AppUi_OpenTool(idx);
 }
 
@@ -234,6 +238,82 @@ static void buildData(lv_obj_t *scr) {
     lv_obj_center(l);
 }
 
+// ---- AJUSTES (configuracoes) ----------------------------------------------
+static lv_obj_t *s_lblBri, *s_lblRef, *s_lblFlip, *s_lblBeep;
+static int g_bright = 60;
+
+static void setRefresh() {
+    char b[48];
+    snprintf(b, sizeof(b), "Brilho:  %d%%", g_bright);                          lv_label_set_text(s_lblBri, b);
+    snprintf(b, sizeof(b), "Ruido (ref dB):  %.0f", (double)MicDB_GetRef());     lv_label_set_text(s_lblRef, b);
+    snprintf(b, sizeof(b), "Bolha:   X %c    Y %c",
+             LevelApp_SignXPos() ? '+' : '-', LevelApp_SignYPos() ? '+' : '-');  lv_label_set_text(s_lblFlip, b);
+    snprintf(b, sizeof(b), "Bip de nivel:  %s", LevelApp_GetBeep() ? "LIGADO" : "DESLIGADO"); lv_label_set_text(s_lblBeep, b);
+}
+
+static void onBriM (lv_event_t *e){ (void)e; g_bright -= 10; if (g_bright < 10)  g_bright = 10;  Set_Backlight(g_bright); setRefresh(); }
+static void onBriP (lv_event_t *e){ (void)e; g_bright += 10; if (g_bright > 100) g_bright = 100; Set_Backlight(g_bright); setRefresh(); }
+static void onRefM (lv_event_t *e){ (void)e; MicDB_SetRef(MicDB_GetRef() - 1); setRefresh(); }
+static void onRefP (lv_event_t *e){ (void)e; MicDB_SetRef(MicDB_GetRef() + 1); setRefresh(); }
+static void onFlipX(lv_event_t *e){ (void)e; LevelApp_FlipX(); setRefresh(); }
+static void onFlipY(lv_event_t *e){ (void)e; LevelApp_FlipY(); setRefresh(); }
+static void onBeepT(lv_event_t *e){ (void)e; LevelApp_SetBeep(!LevelApp_GetBeep()); setRefresh(); }
+static void onSetBack(lv_event_t *e){ (void)e; AppUi_ShowMenu(); }
+
+static lv_obj_t *sBtn(lv_obj_t *p, const char *txt, int x, int y, int w, lv_event_cb_t cb, uint32_t col) {
+    lv_obj_t *b = lv_btn_create(p);
+    lv_obj_set_size(b, w, 36);
+    lv_obj_align(b, LV_ALIGN_TOP_MID, x, y);
+    lv_obj_set_style_radius(b, 18, 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(col), 0);
+    lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *l = lv_label_create(b); lv_label_set_text(l, txt); lv_obj_center(l);
+    return b;
+}
+static lv_obj_t *sLabel(lv_obj_t *p, int y) {
+    lv_obj_t *l = lv_label_create(p);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(0xe5e7eb), 0);
+    lv_obj_align(l, LV_ALIGN_TOP_MID, 0, y);
+    return l;
+}
+
+static void buildSettings(lv_obj_t *scr) {
+    setCont = lv_obj_create(scr);
+    lv_obj_set_size(setCont, 412, 412);
+    lv_obj_center(setCont);
+    lv_obj_clear_flag(setCont, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_radius(setCont, 0, 0);
+    lv_obj_set_style_border_width(setCont, 0, 0);
+    lv_obj_set_style_bg_color(setCont, lv_color_hex(0x05070a), 0);
+    lv_obj_set_style_bg_opa(setCont, LV_OPA_COVER, 0);
+
+    lv_obj_t *title = lv_label_create(setCont);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x94a3b8), 0);
+    lv_label_set_text(title, "AJUSTES");
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 30);
+
+    s_lblBri = sLabel(setCont, 78);                            // Brilho
+    sBtn(setCont, "-", -120, 72, 44, onBriM, 0x374151);
+    sBtn(setCont, "+",  120, 72, 44, onBriP, 0x374151);
+
+    s_lblRef = sLabel(setCont, 132);                           // Ruido (calibracao dB)
+    sBtn(setCont, "-", -120, 126, 44, onRefM, 0x374151);
+    sBtn(setCont, "+",  120, 126, 44, onRefP, 0x374151);
+
+    s_lblFlip = sLabel(setCont, 184);                          // Inverter bolha
+    sBtn(setCont, "inv X", -68, 200, 72, onFlipX, 0x2563eb);
+    sBtn(setCont, "inv Y",  68, 200, 72, onFlipY, 0x2563eb);
+
+    s_lblBeep = sLabel(setCont, 250);                          // Bip
+    sBtn(setCont, "trocar", 0, 266, 96, onBeepT, 0x16a34a);
+
+    sBtn(setCont, "MENU", 0, 322, 104, onSetBack, 0x475569);   // Voltar
+
+    setRefresh();
+}
+
 // ---- API ------------------------------------------------------------------
 void AppUi_Init() {
     lv_obj_t *scr = lv_scr_act();
@@ -262,6 +342,8 @@ void AppUi_Init() {
     lv_obj_set_style_pad_all(sunCont, 0, 0);
     SunApp_Build(sunCont);
 
+    buildSettings(scr);
+
     splashStart = millis();
     show(ST_SPLASH);
 }
@@ -277,8 +359,9 @@ void AppUi_OpenTool(int mode) {
     show(ST_TOOL);
 }
 
-void AppUi_ShowMenu()   { show(ST_MENU); }
-void AppUi_ShowData()   { show(ST_DATA); }
-void AppUi_ShowSun()    { show(ST_SUN); }
-bool AppUi_ToolActive() { return st == ST_TOOL; }
-bool AppUi_SunActive()  { return st == ST_SUN; }
+void AppUi_ShowMenu()     { show(ST_MENU); }
+void AppUi_ShowData()     { show(ST_DATA); }
+void AppUi_ShowSun()      { show(ST_SUN); }
+void AppUi_ShowSettings() { show(ST_SET); }
+bool AppUi_ToolActive()   { return st == ST_TOOL; }
+bool AppUi_SunActive()    { return st == ST_SUN; }
