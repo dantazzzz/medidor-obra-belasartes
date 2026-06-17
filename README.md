@@ -241,8 +241,6 @@ NivelDigital/
 - **Murillo Vinícius** — GitHub [@dantazzzz](https://github.com/dantazzzz) · murillovinicius18@gmail.com
 - **Amanda Célia Aparecida da Silva**
 
-**Instituição:** Centro Universitário Belas Artes de São Paulo (FEBASP).
-
 **Tecnologias de terceiros:**
 - Drivers da placa: demos oficiais da [Waveshare](https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-1.46B)
 - Interface gráfica: [LVGL](https://lvgl.io) 8.3 (licença MIT)
