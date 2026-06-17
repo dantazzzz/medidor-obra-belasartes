@@ -1,4 +1,4 @@
-# 📐 Medidor de Obra — Belas Artes
+# 📐 Medidor de Obra
 
 **Caixa de ferramentas de obra de bolso numa telinha redonda sensível ao toque
 (ESP32-S3).** São **nove ferramentas de medição** — nível, prumo, declividade (%),
