@@ -14,7 +14,6 @@ Firmware Arduino (C/C++) para a placa **Waveshare ESP32-S3-Touch-LCD-1.46B**
 áudio I2S, relógio PCF85063, cartão SD e WiFi).
 
 Desenvolvido por **Murillo Vinícius** e **Amanda Célia Aparecida da Silva** ·
-Centro Universitário **Belas Artes** de São Paulo (FEBASP).
 
 > 👉 Não é da área de eletrônica/programação? Comece pelo
 > **[docs/COMO_USAR.md](docs/COMO_USAR.md)** — guia ilustrado de uso, passo a
